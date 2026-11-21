@@ -9,6 +9,10 @@ pub const MAX_ROM_SIZE: usize = MEMORY_SIZE - PROGRAM_START as usize;
 #[derive(Debug, PartialEq, Eq)]
 pub struct RomTooLarge(pub usize);
 
+/// Opcode not recognised by the interpreter.
+#[derive(Debug, PartialEq, Eq)]
+pub struct UnknownOpcode(pub u16);
+
 pub struct Chip8 {
     memory: [u8; MEMORY_SIZE],
     pc: u16,
@@ -40,6 +44,18 @@ impl Chip8 {
         self.pc += 2;
         op
     }
+
+    /// Executes a single instruction.
+    pub fn step(&mut self) -> Result<(), UnknownOpcode> {
+        let op = self.fetch();
+        let nnn = op & 0x0FFF;
+
+        match op >> 12 {
+            0x1 => self.pc = nnn,
+            _ => return Err(UnknownOpcode(op)),
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -70,5 +86,20 @@ mod tests {
         c.load_rom(&[0x12, 0x34]).unwrap();
         assert_eq!(c.fetch(), 0x1234);
         assert_eq!(c.pc, PROGRAM_START + 2);
+    }
+
+    #[test]
+    fn step_1nnn_jumps() {
+        let mut c = Chip8::new();
+        c.load_rom(&[0x1A, 0xBC]).unwrap();
+        c.step().unwrap();
+        assert_eq!(c.pc, 0xABC);
+    }
+
+    #[test]
+    fn step_rejects_unknown_opcode() {
+        let mut c = Chip8::new();
+        c.load_rom(&[0xFF, 0xFF]).unwrap();
+        assert_eq!(c.step(), Err(UnknownOpcode(0xFFFF)));
     }
 }
