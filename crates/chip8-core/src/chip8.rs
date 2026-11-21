@@ -32,6 +32,14 @@ impl Chip8 {
         self.memory[start..start + rom.len()].copy_from_slice(rom);
         Ok(())
     }
+
+    /// Reads the big-endian opcode at `pc` and advances past it.
+    fn fetch(&mut self) -> u16 {
+        let pc = self.pc as usize;
+        let op = u16::from_be_bytes([self.memory[pc], self.memory[pc + 1]]);
+        self.pc += 2;
+        op
+    }
 }
 
 #[cfg(test)]
@@ -54,5 +62,13 @@ mod tests {
     fn load_rom_rejects_oversized_rom() {
         let rom = vec![0; MAX_ROM_SIZE + 1];
         assert_eq!(Chip8::new().load_rom(&rom), Err(RomTooLarge(rom.len())));
+    }
+
+    #[test]
+    fn fetch_reads_big_endian_and_advances_pc() {
+        let mut c = Chip8::new();
+        c.load_rom(&[0x12, 0x34]).unwrap();
+        assert_eq!(c.fetch(), 0x1234);
+        assert_eq!(c.pc, PROGRAM_START + 2);
     }
 }
