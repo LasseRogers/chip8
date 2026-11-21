@@ -60,6 +60,8 @@ impl Chip8 {
         match op >> 12 {
             0x1 => self.pc = nnn,
             0x6 => self.v[x] = nn,
+            // Wraps on overflow; unlike 8XY4, VF is not affected.
+            0x7 => self.v[x] = self.v[x].wrapping_add(nn),
             _ => return Err(UnknownOpcode(op)),
         }
         Ok(())
@@ -117,5 +119,24 @@ mod tests {
         c.load_rom(&[0x6A, 0x42]).unwrap();
         c.step().unwrap();
         assert_eq!(c.v[0xA], 0x42);
+    }
+
+    #[test]
+    fn step_7xnn_adds_to_register() {
+        let mut c = Chip8::new();
+        c.load_rom(&[0x63, 0x10, 0x73, 0x05]).unwrap();
+        c.step().unwrap();
+        c.step().unwrap();
+        assert_eq!(c.v[3], 0x15);
+    }
+
+    #[test]
+    fn step_7xnn_wraps_without_touching_vf() {
+        let mut c = Chip8::new();
+        c.load_rom(&[0x63, 0xFF, 0x73, 0x02]).unwrap();
+        c.step().unwrap();
+        c.step().unwrap();
+        assert_eq!(c.v[3], 0x01);
+        assert_eq!(c.v[0xF], 0);
     }
 }
