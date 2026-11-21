@@ -5,6 +5,8 @@ pub const PROGRAM_START: u16 = 0x200;
 /// Largest ROM that fits between `PROGRAM_START` and the end of memory.
 pub const MAX_ROM_SIZE: usize = MEMORY_SIZE - PROGRAM_START as usize;
 
+const REGISTER_COUNT: usize = 16;
+
 /// ROM exceeds `MAX_ROM_SIZE`; holds the rejected size in bytes.
 #[derive(Debug, PartialEq, Eq)]
 pub struct RomTooLarge(pub usize);
@@ -16,6 +18,8 @@ pub struct UnknownOpcode(pub u16);
 pub struct Chip8 {
     memory: [u8; MEMORY_SIZE],
     pc: u16,
+    /// General-purpose registers V0..VF; VF doubles as the flag register.
+    v: [u8; REGISTER_COUNT],
 }
 
 impl Chip8 {
@@ -24,6 +28,7 @@ impl Chip8 {
         Self {
             memory: [0; MEMORY_SIZE],
             pc: PROGRAM_START,
+            v: [0; REGISTER_COUNT],
         }
     }
 
@@ -48,10 +53,13 @@ impl Chip8 {
     /// Executes a single instruction.
     pub fn step(&mut self) -> Result<(), UnknownOpcode> {
         let op = self.fetch();
+        let x = usize::from((op >> 8) & 0xF);
+        let nn = (op & 0xFF) as u8;
         let nnn = op & 0x0FFF;
 
         match op >> 12 {
             0x1 => self.pc = nnn,
+            0x6 => self.v[x] = nn,
             _ => return Err(UnknownOpcode(op)),
         }
         Ok(())
@@ -101,5 +109,13 @@ mod tests {
         let mut c = Chip8::new();
         c.load_rom(&[0xFF, 0xFF]).unwrap();
         assert_eq!(c.step(), Err(UnknownOpcode(0xFFFF)));
+    }
+
+    #[test]
+    fn step_6xnn_sets_register() {
+        let mut c = Chip8::new();
+        c.load_rom(&[0x6A, 0x42]).unwrap();
+        c.step().unwrap();
+        assert_eq!(c.v[0xA], 0x42);
     }
 }
