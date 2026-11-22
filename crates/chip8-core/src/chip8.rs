@@ -1,5 +1,7 @@
 //! CHIP-8 machine state.
 
+use std::fmt;
+
 pub const MEMORY_SIZE: usize = 4096;
 pub const PROGRAM_START: u16 = 0x200;
 /// Largest ROM that fits between `PROGRAM_START` and the end of memory.
@@ -14,9 +16,22 @@ const REGISTER_COUNT: usize = 16;
 #[derive(Debug, PartialEq, Eq)]
 pub struct RomTooLarge(pub usize);
 
-/// Opcode not recognised by the interpreter.
+/// Failure while executing an instruction.
 #[derive(Debug, PartialEq, Eq)]
-pub struct UnknownOpcode(pub u16);
+pub enum ExecError {
+    /// Opcode not recognised by the interpreter.
+    UnknownOpcode(u16),
+}
+
+impl fmt::Display for ExecError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnknownOpcode(op) => write!(f, "unknown opcode {op:#06X}"),
+        }
+    }
+}
+
+impl std::error::Error for ExecError {}
 
 pub struct Chip8 {
     memory: [u8; MEMORY_SIZE],
@@ -65,7 +80,7 @@ impl Chip8 {
     }
 
     /// Executes a single instruction.
-    pub fn step(&mut self) -> Result<(), UnknownOpcode> {
+    pub fn step(&mut self) -> Result<(), ExecError> {
         let op = self.fetch();
         let x = usize::from((op >> 8) & 0xF);
         let y = usize::from((op >> 4) & 0xF);
@@ -76,7 +91,7 @@ impl Chip8 {
         match op >> 12 {
             0x0 => match op {
                 0x00E0 => self.display.fill(false),
-                _ => return Err(UnknownOpcode(op)),
+                _ => return Err(ExecError::UnknownOpcode(op)),
             },
             0x1 => self.pc = nnn,
             0x6 => self.v[x] = nn,
@@ -84,7 +99,7 @@ impl Chip8 {
             0x7 => self.v[x] = self.v[x].wrapping_add(nn),
             0xA => self.i = nnn,
             0xD => self.draw_sprite(x, y, n),
-            _ => return Err(UnknownOpcode(op)),
+            _ => return Err(ExecError::UnknownOpcode(op)),
         }
         Ok(())
     }
@@ -163,7 +178,7 @@ mod tests {
     fn step_rejects_unknown_opcode() {
         let mut c = Chip8::new();
         c.load_rom(&[0xFF, 0xFF]).unwrap();
-        assert_eq!(c.step(), Err(UnknownOpcode(0xFFFF)));
+        assert_eq!(c.step(), Err(ExecError::UnknownOpcode(0xFFFF)));
     }
 
     #[test]

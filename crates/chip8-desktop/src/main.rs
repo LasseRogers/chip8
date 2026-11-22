@@ -2,7 +2,7 @@
 
 use std::{env, fs, process::ExitCode};
 
-use chip8_core::{Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH, UnknownOpcode};
+use chip8_core::{Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH};
 use minifb::{Key, Scale, Window, WindowOptions};
 
 const PIXEL_ON: u32 = 0x00FF_FFFF;
@@ -46,8 +46,8 @@ fn main() -> ExitCode {
     let mut buffer = vec![PIXEL_OFF; DISPLAY_WIDTH * DISPLAY_HEIGHT];
     while window.is_open() && !window.is_key_down(Key::Escape) {
         for _ in 0..INSTRUCTIONS_PER_FRAME {
-            if let Err(UnknownOpcode(op)) = chip8.step() {
-                eprintln!("unknown opcode {op:#06X}");
+            if let Err(e) = chip8.step() {
+                eprintln!("{e}");
                 return ExitCode::FAILURE;
             }
         }
