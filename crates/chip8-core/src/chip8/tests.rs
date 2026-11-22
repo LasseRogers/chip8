@@ -266,3 +266,22 @@ fn step_8xy4_flag_wins_when_target_is_vf() {
     }
     assert_eq!(c.v[0xF], 0);
 }
+
+#[test]
+fn step_8xy6_8xye_shift_vy_into_vx() {
+    // V0 = 0xFF (must be ignored), V1 = v1, then 8 0 1 N.
+    for (n, v1, expected_v0, expected_vf) in [
+        (0x6, 0x81, 0x40, 1), // right, low bit out
+        (0x6, 0x42, 0x21, 0),
+        (0xE, 0x81, 0x02, 1), // left, high bit out
+        (0xE, 0x42, 0x84, 0),
+    ] {
+        let mut c = Chip8::new();
+        c.load_rom(&[0x60, 0xFF, 0x61, v1, 0x80, 0x10 | n]).unwrap();
+        for _ in 0..3 {
+            c.step().unwrap();
+        }
+        assert_eq!(c.v[0], expected_v0, "8XY{n:X} {v1:#04X}");
+        assert_eq!(c.v[0xF], expected_vf, "8XY{n:X} {v1:#04X} VF");
+    }
+}

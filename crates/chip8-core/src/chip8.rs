@@ -150,10 +150,13 @@ impl Chip8 {
                 let (diff, borrow) = self.v[x].overflowing_sub(vy);
                 self.set_with_flag(x, diff, !borrow);
             }
+            // COSMAC VIP quirk: shifts read VY, not VX.
+            0x6 => self.set_with_flag(x, vy >> 1, vy & 0x01 != 0),
             0x7 => {
                 let (diff, borrow) = vy.overflowing_sub(self.v[x]);
                 self.set_with_flag(x, diff, !borrow);
             }
+            0xE => self.set_with_flag(x, vy << 1, vy & 0x80 != 0),
             _ => return Err(ExecError::UnknownOpcode(op)),
         }
         Ok(())
