@@ -109,6 +109,8 @@ impl Chip8 {
             },
             0x1 => self.pc = nnn,
             0x2 => self.call(nnn)?,
+            0x3 => self.skip_if(self.v[x] == nn),
+            0x4 => self.skip_if(self.v[x] != nn),
             0x6 => self.v[x] = nn,
             // Wraps on overflow; unlike 8XY4, VF is not affected.
             0x7 => self.v[x] = self.v[x].wrapping_add(nn),
@@ -117,6 +119,13 @@ impl Chip8 {
             _ => return Err(ExecError::UnknownOpcode(op)),
         }
         Ok(())
+    }
+
+    /// Skips the next instruction when `cond` holds.
+    fn skip_if(&mut self, cond: bool) {
+        if cond {
+            self.pc += 2;
+        }
     }
 
     /// Pushes the return address and jumps to `addr`.
@@ -325,5 +334,29 @@ mod tests {
         let mut c = Chip8::new();
         c.load_rom(&[0x00, 0xEE]).unwrap();
         assert_eq!(c.step(), Err(ExecError::StackUnderflow));
+    }
+
+    #[test]
+    fn step_3xnn_skips_if_equal() {
+        // V0 = 0x05, then 3 0 NN.
+        for (nn, expected_pc) in [(0x05, 0x206), (0x06, 0x204)] {
+            let mut c = Chip8::new();
+            c.load_rom(&[0x60, 0x05, 0x30, nn]).unwrap();
+            c.step().unwrap();
+            c.step().unwrap();
+            assert_eq!(c.pc, expected_pc, "nn = {nn:#04X}");
+        }
+    }
+
+    #[test]
+    fn step_4xnn_skips_if_not_equal() {
+        // V0 = 0x05, then 4 0 NN.
+        for (nn, expected_pc) in [(0x05, 0x204), (0x06, 0x206)] {
+            let mut c = Chip8::new();
+            c.load_rom(&[0x60, 0x05, 0x40, nn]).unwrap();
+            c.step().unwrap();
+            c.step().unwrap();
+            assert_eq!(c.pc, expected_pc, "nn = {nn:#04X}");
+        }
     }
 }
