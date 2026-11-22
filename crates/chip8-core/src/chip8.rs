@@ -20,6 +20,8 @@ pub struct Chip8 {
     pc: u16,
     /// General-purpose registers V0..VF; VF doubles as the flag register.
     v: [u8; REGISTER_COUNT],
+    /// Index register; holds memory addresses for sprite and load/store ops.
+    i: u16,
 }
 
 impl Chip8 {
@@ -29,6 +31,7 @@ impl Chip8 {
             memory: [0; MEMORY_SIZE],
             pc: PROGRAM_START,
             v: [0; REGISTER_COUNT],
+            i: 0,
         }
     }
 
@@ -62,6 +65,7 @@ impl Chip8 {
             0x6 => self.v[x] = nn,
             // Wraps on overflow; unlike 8XY4, VF is not affected.
             0x7 => self.v[x] = self.v[x].wrapping_add(nn),
+            0xA => self.i = nnn,
             _ => return Err(UnknownOpcode(op)),
         }
         Ok(())
@@ -138,5 +142,13 @@ mod tests {
         c.step().unwrap();
         assert_eq!(c.v[3], 0x01);
         assert_eq!(c.v[0xF], 0);
+    }
+
+    #[test]
+    fn step_annn_sets_index() {
+        let mut c = Chip8::new();
+        c.load_rom(&[0xA1, 0x23]).unwrap();
+        c.step().unwrap();
+        assert_eq!(c.i, 0x123);
     }
 }
