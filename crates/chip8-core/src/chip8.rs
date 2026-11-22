@@ -51,6 +51,11 @@ impl Chip8 {
         Ok(())
     }
 
+    /// Row-major framebuffer of `DISPLAY_WIDTH * DISPLAY_HEIGHT` pixels.
+    pub fn display(&self) -> &[bool] {
+        &self.display
+    }
+
     /// Reads the big-endian opcode at `pc` and advances past it.
     fn fetch(&mut self) -> u16 {
         let pc = self.pc as usize;
@@ -228,5 +233,12 @@ mod tests {
         }
         assert!(!c.display[0]);
         assert_eq!(c.v[0xF], 1);
+    }
+
+    #[test]
+    fn display_exposes_full_framebuffer() {
+        let c = Chip8::new();
+        assert_eq!(c.display().len(), DISPLAY_WIDTH * DISPLAY_HEIGHT);
+        assert!(c.display().iter().all(|&p| !p));
     }
 }
