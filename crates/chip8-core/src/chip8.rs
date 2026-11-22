@@ -111,9 +111,11 @@ impl Chip8 {
             0x2 => self.call(nnn)?,
             0x3 => self.skip_if(self.v[x] == nn),
             0x4 => self.skip_if(self.v[x] != nn),
+            0x5 if n == 0 => self.skip_if(self.v[x] == self.v[y]),
             0x6 => self.v[x] = nn,
             // Wraps on overflow; unlike 8XY4, VF is not affected.
             0x7 => self.v[x] = self.v[x].wrapping_add(nn),
+            0x9 if n == 0 => self.skip_if(self.v[x] != self.v[y]),
             0xA => self.i = nnn,
             0xD => self.draw_sprite(x, y, n),
             _ => return Err(ExecError::UnknownOpcode(op)),
@@ -358,5 +360,38 @@ mod tests {
             c.step().unwrap();
             assert_eq!(c.pc, expected_pc, "nn = {nn:#04X}");
         }
+    }
+
+    #[test]
+    fn step_5xy0_skips_if_registers_equal() {
+        // V0 = 0x05, V1 = v1, then 5 0 1 0.
+        for (v1, expected_pc) in [(0x05, 0x208), (0x06, 0x206)] {
+            let mut c = Chip8::new();
+            c.load_rom(&[0x60, 0x05, 0x61, v1, 0x50, 0x10]).unwrap();
+            for _ in 0..3 {
+                c.step().unwrap();
+            }
+            assert_eq!(c.pc, expected_pc, "v1 = {v1:#04X}");
+        }
+    }
+
+    #[test]
+    fn step_9xy0_skips_if_registers_differ() {
+        // V0 = 0x05, V1 = v1, then 9 0 1 0.
+        for (v1, expected_pc) in [(0x05, 0x206), (0x06, 0x208)] {
+            let mut c = Chip8::new();
+            c.load_rom(&[0x60, 0x05, 0x61, v1, 0x90, 0x10]).unwrap();
+            for _ in 0..3 {
+                c.step().unwrap();
+            }
+            assert_eq!(c.pc, expected_pc, "v1 = {v1:#04X}");
+        }
+    }
+
+    #[test]
+    fn step_rejects_register_skip_with_nonzero_low_nibble() {
+        let mut c = Chip8::new();
+        c.load_rom(&[0x50, 0x11]).unwrap();
+        assert_eq!(c.step(), Err(ExecError::UnknownOpcode(0x5011)));
     }
 }
