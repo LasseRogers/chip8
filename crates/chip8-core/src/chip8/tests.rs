@@ -234,3 +234,35 @@ fn step_8xy0_to_8xy3_copy_and_logic() {
         assert_eq!(c.v[0xF], expected_vf, "8XY{n:X} VF");
     }
 }
+
+#[test]
+fn step_8xy4_8xy5_8xy7_arithmetic_with_flags() {
+    // V0 = v0, V1 = v1, then 8 0 1 N.
+    for (n, v0, v1, expected_v0, expected_vf) in [
+        (0x4, 0x10, 0x20, 0x30, 0), // add
+        (0x4, 0xFF, 0x02, 0x01, 1), // add with carry
+        (0x5, 0x30, 0x10, 0x20, 1), // VX - VY, no borrow
+        (0x5, 0x10, 0x30, 0xE0, 0), // VX - VY, borrow
+        (0x7, 0x10, 0x30, 0x20, 1), // VY - VX, no borrow
+        (0x7, 0x30, 0x10, 0xE0, 0), // VY - VX, borrow
+    ] {
+        let mut c = Chip8::new();
+        c.load_rom(&[0x60, v0, 0x61, v1, 0x80, 0x10 | n]).unwrap();
+        for _ in 0..3 {
+            c.step().unwrap();
+        }
+        assert_eq!(c.v[0], expected_v0, "8XY{n:X} {v0:#04X} {v1:#04X}");
+        assert_eq!(c.v[0xF], expected_vf, "8XY{n:X} {v0:#04X} {v1:#04X} VF");
+    }
+}
+
+#[test]
+fn step_8xy4_flag_wins_when_target_is_vf() {
+    // VF = 0x10, V1 = 0x20, then VF += V1: sum 0x30, but VF ends as carry 0.
+    let mut c = Chip8::new();
+    c.load_rom(&[0x6F, 0x10, 0x61, 0x20, 0x8F, 0x14]).unwrap();
+    for _ in 0..3 {
+        c.step().unwrap();
+    }
+    assert_eq!(c.v[0xF], 0);
+}

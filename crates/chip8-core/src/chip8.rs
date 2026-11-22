@@ -142,9 +142,27 @@ impl Chip8 {
                 self.v[x] ^= vy;
                 self.v[0xF] = 0;
             }
+            0x4 => {
+                let (sum, carry) = self.v[x].overflowing_add(vy);
+                self.set_with_flag(x, sum, carry);
+            }
+            0x5 => {
+                let (diff, borrow) = self.v[x].overflowing_sub(vy);
+                self.set_with_flag(x, diff, !borrow);
+            }
+            0x7 => {
+                let (diff, borrow) = vy.overflowing_sub(self.v[x]);
+                self.set_with_flag(x, diff, !borrow);
+            }
             _ => return Err(ExecError::UnknownOpcode(op)),
         }
         Ok(())
+    }
+
+    /// Writes `value` to Vx, then `flag` to VF, so the flag wins when x is F.
+    fn set_with_flag(&mut self, x: usize, value: u8, flag: bool) {
+        self.v[x] = value;
+        self.v[0xF] = u8::from(flag);
     }
 
     /// Skips the next instruction when `cond` holds.
