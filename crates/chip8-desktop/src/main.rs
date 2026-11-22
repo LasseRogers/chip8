@@ -2,11 +2,13 @@
 
 use std::{env, fs, process::ExitCode};
 
-use chip8_core::{Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH};
+use chip8_core::{Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH, UnknownOpcode};
 use minifb::{Key, Scale, Window, WindowOptions};
 
 const PIXEL_ON: u32 = 0x00FF_FFFF;
 const PIXEL_OFF: u32 = 0x0000_0000;
+/// ~700 instructions/s at 60 fps, the conventional CHIP-8 speed.
+const INSTRUCTIONS_PER_FRAME: usize = 12;
 
 fn main() -> ExitCode {
     let Some(path) = env::args().nth(1) else {
@@ -43,6 +45,12 @@ fn main() -> ExitCode {
 
     let mut buffer = vec![PIXEL_OFF; DISPLAY_WIDTH * DISPLAY_HEIGHT];
     while window.is_open() && !window.is_key_down(Key::Escape) {
+        for _ in 0..INSTRUCTIONS_PER_FRAME {
+            if let Err(UnknownOpcode(op)) = chip8.step() {
+                eprintln!("unknown opcode {op:#06X}");
+                return ExitCode::FAILURE;
+            }
+        }
         render(chip8.display(), &mut buffer);
         if let Err(e) = window.update_with_buffer(&buffer, DISPLAY_WIDTH, DISPLAY_HEIGHT) {
             eprintln!("failed to update window: {e}");
