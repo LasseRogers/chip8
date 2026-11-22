@@ -24,6 +24,8 @@ pub enum ExecError {
     UnknownOpcode(u16),
     /// `2NNN` with every stack level in use.
     StackOverflow,
+    /// `00EE` with an empty stack.
+    StackUnderflow,
 }
 
 impl fmt::Display for ExecError {
@@ -31,6 +33,7 @@ impl fmt::Display for ExecError {
         match self {
             Self::UnknownOpcode(op) => write!(f, "unknown opcode {op:#06X}"),
             Self::StackOverflow => f.write_str("stack overflow"),
+            Self::StackUnderflow => f.write_str("stack underflow"),
         }
     }
 }
@@ -101,6 +104,7 @@ impl Chip8 {
         match op >> 12 {
             0x0 => match op {
                 0x00E0 => self.display.fill(false),
+                0x00EE => self.ret()?,
                 _ => return Err(ExecError::UnknownOpcode(op)),
             },
             0x1 => self.pc = nnn,
@@ -121,6 +125,13 @@ impl Chip8 {
         *slot = self.pc;
         self.sp += 1;
         self.pc = addr;
+        Ok(())
+    }
+
+    /// Pops the return address pushed by `call`.
+    fn ret(&mut self) -> Result<(), ExecError> {
+        self.sp = self.sp.checked_sub(1).ok_or(ExecError::StackUnderflow)?;
+        self.pc = self.stack[self.sp];
         Ok(())
     }
 
@@ -296,5 +307,23 @@ mod tests {
             c.step().unwrap();
         }
         assert_eq!(c.step(), Err(ExecError::StackOverflow));
+    }
+
+    #[test]
+    fn step_00ee_returns_after_call() {
+        let mut c = Chip8::new();
+        // 0x200: call 0x204; 0x202: (return lands here); 0x204: return.
+        c.load_rom(&[0x22, 0x04, 0x00, 0x00, 0x00, 0xEE]).unwrap();
+        c.step().unwrap();
+        c.step().unwrap();
+        assert_eq!(c.pc, PROGRAM_START + 2);
+        assert_eq!(c.sp, 0);
+    }
+
+    #[test]
+    fn step_00ee_rejects_stack_underflow() {
+        let mut c = Chip8::new();
+        c.load_rom(&[0x00, 0xEE]).unwrap();
+        assert_eq!(c.step(), Err(ExecError::StackUnderflow));
     }
 }
