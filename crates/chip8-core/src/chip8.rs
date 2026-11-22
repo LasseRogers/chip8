@@ -115,9 +115,33 @@ impl Chip8 {
             0x6 => self.v[x] = nn,
             // Wraps on overflow; unlike 8XY4, VF is not affected.
             0x7 => self.v[x] = self.v[x].wrapping_add(nn),
+            0x8 => self.alu(op, x, y, n)?,
             0x9 if n == 0 => self.skip_if(self.v[x] != self.v[y]),
             0xA => self.i = nnn,
             0xD => self.draw_sprite(x, y, n),
+            _ => return Err(ExecError::UnknownOpcode(op)),
+        }
+        Ok(())
+    }
+
+    /// Executes the `8XYN` register-to-register family.
+    fn alu(&mut self, op: u16, x: usize, y: usize, n: usize) -> Result<(), ExecError> {
+        let vy = self.v[y];
+        match n {
+            0x0 => self.v[x] = vy,
+            // COSMAC VIP quirk: the logic ops also reset VF.
+            0x1 => {
+                self.v[x] |= vy;
+                self.v[0xF] = 0;
+            }
+            0x2 => {
+                self.v[x] &= vy;
+                self.v[0xF] = 0;
+            }
+            0x3 => {
+                self.v[x] ^= vy;
+                self.v[0xF] = 0;
+            }
             _ => return Err(ExecError::UnknownOpcode(op)),
         }
         Ok(())
@@ -393,5 +417,25 @@ mod tests {
         let mut c = Chip8::new();
         c.load_rom(&[0x50, 0x11]).unwrap();
         assert_eq!(c.step(), Err(ExecError::UnknownOpcode(0x5011)));
+    }
+
+    #[test]
+    fn step_8xy0_to_8xy3_copy_and_logic() {
+        // V0 = 0b1100, V1 = 0b1010, VF = 1, then 8 0 1 N.
+        for (n, expected_v0, expected_vf) in [
+            (0x0, 0b1010, 1), // copy; VF untouched
+            (0x1, 0b1110, 0), // OR
+            (0x2, 0b1000, 0), // AND
+            (0x3, 0b0110, 0), // XOR
+        ] {
+            let mut c = Chip8::new();
+            c.load_rom(&[0x60, 0x0C, 0x61, 0x0A, 0x6F, 0x01, 0x80, 0x10 | n])
+                .unwrap();
+            for _ in 0..4 {
+                c.step().unwrap();
+            }
+            assert_eq!(c.v[0], expected_v0, "8XY{n:X}");
+            assert_eq!(c.v[0xF], expected_vf, "8XY{n:X} VF");
+        }
     }
 }
