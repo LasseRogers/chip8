@@ -5,4 +5,4 @@
 
 mod chip8;
 
-pub use chip8::{Chip8, RomTooLarge, UnknownOpcode};
+pub use chip8::{Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH, RomTooLarge, UnknownOpcode};
