@@ -63,6 +63,8 @@ impl Chip8 {
     pub fn step(&mut self) -> Result<(), UnknownOpcode> {
         let op = self.fetch();
         let x = usize::from((op >> 8) & 0xF);
+        let y = usize::from((op >> 4) & 0xF);
+        let n = usize::from(op & 0xF);
         let nn = (op & 0xFF) as u8;
         let nnn = op & 0x0FFF;
 
@@ -76,9 +78,41 @@ impl Chip8 {
             // Wraps on overflow; unlike 8XY4, VF is not affected.
             0x7 => self.v[x] = self.v[x].wrapping_add(nn),
             0xA => self.i = nnn,
+            0xD => self.draw_sprite(x, y, n),
             _ => return Err(UnknownOpcode(op)),
         }
         Ok(())
+    }
+
+    /// XOR-draws an `n`-row sprite from memory at `i` to (Vx, Vy).
+    /// The origin wraps; pixels past the right/bottom edge are clipped.
+    /// VF is set to 1 if any lit pixel is turned off, else 0.
+    fn draw_sprite(&mut self, x: usize, y: usize, n: usize) {
+        let x0 = usize::from(self.v[x]) % DISPLAY_WIDTH;
+        let y0 = usize::from(self.v[y]) % DISPLAY_HEIGHT;
+        self.v[0xF] = 0;
+
+        for row in 0..n {
+            let py = y0 + row;
+            if py >= DISPLAY_HEIGHT {
+                break;
+            }
+            let bits = self.memory[(usize::from(self.i) + row) % MEMORY_SIZE];
+            for col in 0..8 {
+                let px = x0 + col;
+                if px >= DISPLAY_WIDTH {
+                    break;
+                }
+                if bits & (0x80 >> col) == 0 {
+                    continue;
+                }
+                let pixel = &mut self.display[py * DISPLAY_WIDTH + px];
+                if *pixel {
+                    self.v[0xF] = 1;
+                }
+                *pixel = !*pixel;
+            }
+        }
     }
 }
 
@@ -169,5 +203,30 @@ mod tests {
         c.load_rom(&[0x00, 0xE0]).unwrap();
         c.step().unwrap();
         assert!(c.display.iter().all(|&p| !p));
+    }
+
+    #[test]
+    fn step_dxyn_draws_sprite() {
+        let mut c = Chip8::new();
+        // I = 0x204; draw 2 rows at (V0, V1) = (0, 0); sprite data.
+        c.load_rom(&[0xA2, 0x04, 0xD0, 0x12, 0xF0, 0x90]).unwrap();
+        c.step().unwrap();
+        c.step().unwrap();
+        let (on, off) = (true, false);
+        assert_eq!(c.display[0..8], [on, on, on, on, off, off, off, off]);
+        assert_eq!(c.display[64..72], [on, off, off, on, off, off, off, off]);
+        assert_eq!(c.v[0xF], 0);
+    }
+
+    #[test]
+    fn step_dxyn_sets_vf_on_collision() {
+        let mut c = Chip8::new();
+        // I = 0x206; draw the same 1-row sprite twice; sprite data.
+        c.load_rom(&[0xA2, 0x06, 0xD0, 0x11, 0xD0, 0x11, 0x80]).unwrap();
+        for _ in 0..3 {
+            c.step().unwrap();
+        }
+        assert!(!c.display[0]);
+        assert_eq!(c.v[0xF], 1);
     }
 }
