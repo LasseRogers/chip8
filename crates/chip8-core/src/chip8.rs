@@ -11,6 +11,7 @@ pub const DISPLAY_WIDTH: usize = 64;
 pub const DISPLAY_HEIGHT: usize = 32;
 
 const REGISTER_COUNT: usize = 16;
+const STACK_DEPTH: usize = 16;
 
 /// ROM exceeds `MAX_ROM_SIZE`; holds the rejected size in bytes.
 #[derive(Debug, PartialEq, Eq)]
@@ -21,12 +22,15 @@ pub struct RomTooLarge(pub usize);
 pub enum ExecError {
     /// Opcode not recognised by the interpreter.
     UnknownOpcode(u16),
+    /// `2NNN` with every stack level in use.
+    StackOverflow,
 }
 
 impl fmt::Display for ExecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownOpcode(op) => write!(f, "unknown opcode {op:#06X}"),
+            Self::StackOverflow => f.write_str("stack overflow"),
         }
     }
 }
@@ -42,6 +46,10 @@ pub struct Chip8 {
     i: u16,
     /// Row-major framebuffer; `true` is a lit pixel.
     display: [bool; DISPLAY_WIDTH * DISPLAY_HEIGHT],
+    /// Return addresses for `2NNN`/`00EE`.
+    stack: [u16; STACK_DEPTH],
+    /// Index of the next free stack slot.
+    sp: usize,
 }
 
 impl Chip8 {
@@ -53,6 +61,8 @@ impl Chip8 {
             v: [0; REGISTER_COUNT],
             i: 0,
             display: [false; DISPLAY_WIDTH * DISPLAY_HEIGHT],
+            stack: [0; STACK_DEPTH],
+            sp: 0,
         }
     }
 
@@ -94,6 +104,7 @@ impl Chip8 {
                 _ => return Err(ExecError::UnknownOpcode(op)),
             },
             0x1 => self.pc = nnn,
+            0x2 => self.call(nnn)?,
             0x6 => self.v[x] = nn,
             // Wraps on overflow; unlike 8XY4, VF is not affected.
             0x7 => self.v[x] = self.v[x].wrapping_add(nn),
@@ -101,6 +112,15 @@ impl Chip8 {
             0xD => self.draw_sprite(x, y, n),
             _ => return Err(ExecError::UnknownOpcode(op)),
         }
+        Ok(())
+    }
+
+    /// Pushes the return address and jumps to `addr`.
+    fn call(&mut self, addr: u16) -> Result<(), ExecError> {
+        let slot = self.stack.get_mut(self.sp).ok_or(ExecError::StackOverflow)?;
+        *slot = self.pc;
+        self.sp += 1;
+        self.pc = addr;
         Ok(())
     }
 
@@ -255,5 +275,26 @@ mod tests {
         let c = Chip8::new();
         assert_eq!(c.display().len(), DISPLAY_WIDTH * DISPLAY_HEIGHT);
         assert!(c.display().iter().all(|&p| !p));
+    }
+
+    #[test]
+    fn step_2nnn_pushes_return_address_and_jumps() {
+        let mut c = Chip8::new();
+        c.load_rom(&[0x23, 0x00]).unwrap();
+        c.step().unwrap();
+        assert_eq!(c.pc, 0x300);
+        assert_eq!(c.sp, 1);
+        assert_eq!(c.stack[0], PROGRAM_START + 2);
+    }
+
+    #[test]
+    fn step_2nnn_rejects_stack_overflow() {
+        let mut c = Chip8::new();
+        // Calls itself forever.
+        c.load_rom(&[0x22, 0x00]).unwrap();
+        for _ in 0..STACK_DEPTH {
+            c.step().unwrap();
+        }
+        assert_eq!(c.step(), Err(ExecError::StackOverflow));
     }
 }
