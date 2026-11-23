@@ -7,11 +7,14 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
 from gymnasium.envs.registration import register
 
+from chip8_rl.invaders import InvadersEnv
 from chip8_rl.pong import PongEnv
 
 PONG_ID = "chip8/Pong-v0"
+INVADERS_ID = "chip8/Invaders-v0"
 
-# Natural episodes end at 9 points (1k-5.5k steps); the cap stops endless rallies.
+# Episodes end on their own; the cap stops endless rallies or waves.
 register(id=PONG_ID, entry_point=PongEnv, max_episode_steps=20_000)
+register(id=INVADERS_ID, entry_point=InvadersEnv, max_episode_steps=20_000)
 
-__all__ = ["PONG_ID", "PongEnv"]
+__all__ = ["INVADERS_ID", "PONG_ID", "InvadersEnv", "PongEnv"]
