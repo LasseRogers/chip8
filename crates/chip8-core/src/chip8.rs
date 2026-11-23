@@ -127,6 +127,17 @@ impl Chip8 {
         &self.display
     }
 
+    /// Decrements both timers towards zero. Call at 60 Hz.
+    pub fn tick_timers(&mut self) {
+        self.delay_timer = self.delay_timer.saturating_sub(1);
+        self.sound_timer = self.sound_timer.saturating_sub(1);
+    }
+
+    /// Whether the buzzer should be sounding.
+    pub fn sound_active(&self) -> bool {
+        self.sound_timer > 0
+    }
+
     /// Reads the big-endian opcode at `pc` and advances past it.
     fn fetch(&mut self) -> u16 {
         let pc = self.pc as usize;

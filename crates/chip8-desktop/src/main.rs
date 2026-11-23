@@ -73,6 +73,8 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         }
+        // One tick per frame: 60 Hz at the window's 60 fps.
+        chip8.tick_timers();
         render(chip8.display(), &mut buffer);
         if let Err(e) = window.update_with_buffer(&buffer, DISPLAY_WIDTH, DISPLAY_HEIGHT) {
             eprintln!("failed to update window: {e}");

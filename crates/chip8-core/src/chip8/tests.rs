@@ -314,3 +314,20 @@ fn step_fx15_fx18_fx07_set_and_read_timers() {
     assert_eq!(c.sound_timer, 0x30);
     assert_eq!(c.v[1], 0x30);
 }
+
+#[test]
+fn tick_timers_counts_down_and_stops_at_zero() {
+    // V0 = 2; delay = V0; sound = V0.
+    let mut c = run(&[0x60, 0x02, 0xF0, 0x15, 0xF0, 0x18], 3);
+    for expected in [1, 0, 0] {
+        assert!(c.sound_active());
+        c.tick_timers();
+        assert_eq!((c.delay_timer, c.sound_timer), (expected, expected));
+        if expected == 0 {
+            break;
+        }
+    }
+    c.tick_timers();
+    assert_eq!((c.delay_timer, c.sound_timer), (0, 0));
+    assert!(!c.sound_active());
+}
