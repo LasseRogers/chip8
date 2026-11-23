@@ -376,5 +376,11 @@ impl Chip8 {
     }
 }
 
+impl Default for Chip8 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests;
