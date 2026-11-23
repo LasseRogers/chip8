@@ -10,6 +10,7 @@ from chip8_rl.dqn import (
     ReplayBuffer,
     dqn_update,
     linear_epsilon,
+    next_state_values,
     select_action,
     td_targets,
 )
@@ -127,3 +128,14 @@ def test_dqn_update_reduces_loss_on_fixed_batch():
     for _ in range(50):
         last = dqn_update(online, target, optimizer, batch, gamma=0.99)
     assert last < first / 10
+
+
+def test_double_dqn_values_the_online_choice_with_the_target_net():
+    online = FixedQ([1.0, 0.0])  # Prefers action 0...
+    target = FixedQ([0.2, 0.9])  # ...which the target network rates low.
+    next_obs = torch.zeros((2, STACK_SIZE, 32, 64), dtype=torch.uint8)
+
+    plain = next_state_values(online, target, next_obs, double=False)
+    double = next_state_values(online, target, next_obs, double=True)
+    assert plain.tolist() == pytest.approx([0.9, 0.9])
+    assert double.tolist() == pytest.approx([0.2, 0.2])

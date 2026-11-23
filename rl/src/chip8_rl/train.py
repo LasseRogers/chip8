@@ -35,6 +35,7 @@ class Config:
     target_sync_every: int = 2_000
     gamma: float = 0.99
     lr: float = 1e-4
+    double_dqn: bool = False
     epsilon_start: float = 1.0
     epsilon_end: float = 0.05
     epsilon_decay_steps: int = 100_000
@@ -104,7 +105,11 @@ def train(cfg: Config, run_dir: Path) -> None:
 
                 if step >= cfg.learning_starts and step % cfg.train_every == 0:
                     batch = buffer.sample(cfg.batch_size, rng)
-                    losses.append(dqn_update(online, target, optimizer, batch, cfg.gamma))
+                    losses.append(
+                        dqn_update(
+                            online, target, optimizer, batch, cfg.gamma, double=cfg.double_dqn
+                        )
+                    )
                 if step % cfg.target_sync_every == 0:
                     target.load_state_dict(online.state_dict())
 

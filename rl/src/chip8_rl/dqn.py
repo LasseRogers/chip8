@@ -133,6 +133,23 @@ def td_targets(
     return rewards + gamma * next_q_max * (1.0 - dones.float())
 
 
+@torch.no_grad()
+def next_state_values(
+    online: nn.Module, target: nn.Module, next_obs: torch.Tensor, double: bool
+) -> torch.Tensor:
+    """Value of each next state under the target network.
+
+    Plain DQN takes the target's max, which favours overestimated actions.
+    Double DQN (van Hasselt et al., 2015) lets the online network choose the
+    action and the target network value it.
+    """
+    target_q = target(next_obs)
+    if not double:
+        return target_q.max(dim=1).values
+    best = online(next_obs).argmax(dim=1, keepdim=True)
+    return target_q.gather(1, best).squeeze(1)
+
+
 def dqn_update(
     online: nn.Module,
     target: nn.Module,
@@ -140,13 +157,15 @@ def dqn_update(
     batch: Batch,
     gamma: float,
     max_grad_norm: float = 10.0,
+    double: bool = False,
 ) -> float:
     """One gradient step of `online` towards targets from the frozen `target`; returns the loss."""
     device = next(online.parameters()).device
     obs, actions, rewards, next_obs, dones = (torch.as_tensor(x, device=device) for x in batch)
 
     with torch.no_grad():
-        targets = td_targets(rewards, target(next_obs).max(dim=1).values, dones, gamma)
+        next_values = next_state_values(online, target, next_obs, double)
+        targets = td_targets(rewards, next_values, dones, gamma)
     predicted = online(obs).gather(1, actions.unsqueeze(1)).squeeze(1)
     # Huber loss: quadratic near zero, linear for large errors, so outliers don't explode.
     loss = nn.functional.smooth_l1_loss(predicted, targets)
