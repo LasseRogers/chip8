@@ -189,6 +189,17 @@ impl Chip8 {
                 let i = usize::from(self.i);
                 self.memory[i..i + 3].copy_from_slice(&[vx / 100, vx / 10 % 10, vx % 10]);
             }
+            // COSMAC VIP quirk: I advances past the copied bytes.
+            0x55 => {
+                let i = usize::from(self.i);
+                self.memory[i..=i + x].copy_from_slice(&self.v[..=x]);
+                self.i += x as u16 + 1;
+            }
+            0x65 => {
+                let i = usize::from(self.i);
+                self.v[..=x].copy_from_slice(&self.memory[i..=i + x]);
+                self.i += x as u16 + 1;
+            }
             _ => return Err(ExecError::UnknownOpcode(op)),
         }
         Ok(())

@@ -248,6 +248,22 @@ fn step_fx33_stores_decimal_digits() {
     assert_eq!(c.memory[0x300..0x303], [1, 5, 7]);
 }
 
+#[test]
+fn step_fx55_stores_registers_and_advances_index() {
+    // V0..V2 = 0x11, 0x22, 0x33; I = 0x300; then F255.
+    let c = run(&[0x60, 0x11, 0x61, 0x22, 0x62, 0x33, 0xA3, 0x00, 0xF2, 0x55], 5);
+    assert_eq!(c.memory[0x300..0x303], [0x11, 0x22, 0x33]);
+    assert_eq!(c.i, 0x303);
+}
+
+#[test]
+fn step_fx65_loads_registers_and_advances_index() {
+    // I = 0x204; F165 loads V0, V1 from the two data bytes that follow.
+    let c = run(&[0xA2, 0x04, 0xF1, 0x65, 0xAA, 0xBB], 2);
+    assert_eq!(c.v[..3], [0xAA, 0xBB, 0x00]);
+    assert_eq!(c.i, 0x206);
+}
+
 // --- Display ---
 
 #[test]
