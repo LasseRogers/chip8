@@ -157,7 +157,7 @@ def dqn_update(
     batch: Batch,
     gamma: float,
     max_grad_norm: float = 10.0,
-    double: bool = False,
+    double: bool = True,
 ) -> float:
     """One gradient step of `online` towards targets from the frozen `target`; returns the loss."""
     device = next(online.parameters()).device

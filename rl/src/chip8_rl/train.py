@@ -35,7 +35,7 @@ class Config:
     target_sync_every: int = 2_000
     gamma: float = 0.99
     lr: float = 1e-4
-    double_dqn: bool = False
+    double_dqn: bool = True
     epsilon_start: float = 1.0
     epsilon_end: float = 0.05
     epsilon_decay_steps: int = 100_000

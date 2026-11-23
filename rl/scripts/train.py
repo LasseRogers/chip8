@@ -16,7 +16,9 @@ def main() -> None:
     parser.add_argument("--game", choices=list(GAMES), default=Config.game)
     parser.add_argument("--steps", type=int, default=Config.total_steps)
     parser.add_argument("--seed", type=int, default=Config.seed)
-    parser.add_argument("--double-dqn", action="store_true")
+    parser.add_argument(
+        "--double-dqn", action=argparse.BooleanOptionalAction, default=Config.double_dqn
+    )
     parser.add_argument(
         "--run-dir", type=Path, default=Path("runs") / time.strftime("%Y%m%d-%H%M%S")
     )
