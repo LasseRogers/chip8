@@ -1,20 +1,42 @@
 //! Desktop frontend for the CHIP-8 interpreter.
 
-use std::{env, fs, process::ExitCode};
+use std::{
+    env, fs,
+    process::ExitCode,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use chip8_core::{Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH};
 use minifb::{Key, Scale, Window, WindowOptions};
 
+const USAGE: &str = "usage: chip8-desktop <rom> [--seed N]";
 const PIXEL_ON: u32 = 0x00FF_FFFF;
 const PIXEL_OFF: u32 = 0x0000_0000;
 /// ~700 instructions/s at 60 fps, the conventional CHIP-8 speed.
 const INSTRUCTIONS_PER_FRAME: usize = 12;
 
 fn main() -> ExitCode {
-    let Some(path) = env::args().nth(1) else {
-        eprintln!("usage: chip8-desktop <rom>");
+    let mut args = env::args().skip(1);
+    let Some(path) = args.next() else {
+        eprintln!("{USAGE}");
         return ExitCode::FAILURE;
     };
+    let seed = match (args.next().as_deref(), args.next()) {
+        (None, _) => clock_seed(),
+        (Some("--seed"), Some(n)) => match n.parse() {
+            Ok(seed) => seed,
+            Err(_) => {
+                eprintln!("invalid seed: {n}");
+                return ExitCode::FAILURE;
+            }
+        },
+        _ => {
+            eprintln!("{USAGE}");
+            return ExitCode::FAILURE;
+        }
+    };
+    // Printed so any run can be replayed with --seed.
+    eprintln!("seed: {seed}");
 
     let rom = match fs::read(&path) {
         Ok(rom) => rom,
@@ -24,7 +46,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let mut chip8 = Chip8::new();
+    let mut chip8 = Chip8::with_seed(seed);
     if let Err(e) = chip8.load_rom(&rom) {
         eprintln!("failed to load {path}: {e:?}");
         return ExitCode::FAILURE;
@@ -58,6 +80,13 @@ fn main() -> ExitCode {
         }
     }
     ExitCode::SUCCESS
+}
+
+/// Nanoseconds since the Unix epoch; differs on every run.
+fn clock_seed() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos() as u64)
 }
 
 /// Converts the CHIP-8 framebuffer to minifb's 0RGB pixel format.
