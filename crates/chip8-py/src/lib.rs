@@ -1,6 +1,6 @@
 //! Python bindings for `chip8-core`.
 
-use chip8_core::{Chip8, DEFAULT_INSTRUCTIONS_PER_FRAME, ExecError, RomTooLarge};
+use chip8_core::{Chip8, DEFAULT_INSTRUCTIONS_PER_FRAME, ExecError, Quirks, RomTooLarge};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -12,9 +12,15 @@ struct PyChip8(Chip8);
 #[pymethods]
 impl PyChip8 {
     #[new]
-    #[pyo3(signature = (seed = 0))]
-    fn new(seed: u64) -> Self {
-        Self(Chip8::with_seed(seed))
+    /// `profile` selects interpreter behaviour: "cosmac" (default) or "superchip".
+    #[pyo3(signature = (seed = 0, profile = "cosmac"))]
+    fn new(seed: u64, profile: &str) -> PyResult<Self> {
+        let quirks = match profile {
+            "cosmac" => Quirks::COSMAC,
+            "superchip" => Quirks::SUPER_CHIP,
+            _ => return Err(PyValueError::new_err(format!("unknown profile: {profile}"))),
+        };
+        Ok(Self(Chip8::with_seed(seed).with_quirks(quirks)))
     }
 
     /// Copies `rom` into memory at 0x200. Raises `ValueError` if it doesn't fit.
@@ -33,6 +39,11 @@ impl PyChip8 {
     #[pyo3(signature = (instructions = DEFAULT_INSTRUCTIONS_PER_FRAME))]
     fn run_frame(&mut self, instructions: usize) -> PyResult<()> {
         self.0.run_frame(instructions).map_err(exec_error)
+    }
+
+    /// V0-VF as 16 bytes.
+    fn registers<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, self.0.registers())
     }
 
     /// `length` bytes of memory from `addr`. Raises `ValueError` if out of range.

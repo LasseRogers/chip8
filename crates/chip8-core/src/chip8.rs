@@ -223,6 +223,11 @@ impl Chip8 {
         self.keys[usize::from(key)] = pressed;
     }
 
+    /// General-purpose registers V0..VF, read-only.
+    pub fn registers(&self) -> &[u8; REGISTER_COUNT] {
+        &self.v
+    }
+
     /// The full 4 KiB address space, read-only.
     pub fn memory(&self) -> &[u8] {
         &self.memory

@@ -494,3 +494,8 @@ fn super_chip_draws_without_waiting_for_frame() {
     );
     assert_eq!(c.pc, PROGRAM_START + 6);
 }
+
+#[test]
+fn registers_expose_v0_to_vf() {
+    assert_eq!(run(&[0x6A, 0x42], 1).registers()[0xA], 0x42);
+}
