@@ -287,7 +287,9 @@ fn step_dxyn_draws_sprite() {
 #[test]
 fn step_dxyn_sets_vf_on_collision() {
     // I = 0x206; draw the same 1-row sprite twice; sprite data.
-    let c = run(&[0xA2, 0x06, 0xD0, 0x11, 0xD0, 0x11, 0x80], 3);
+    let mut c = run(&[0xA2, 0x06, 0xD0, 0x11, 0xD0, 0x11, 0x80], 2);
+    c.tick_timers(); // next frame, so the second draw can run
+    c.step().unwrap();
     assert!(!c.display[0]);
     assert_eq!(c.v[0xF], 1);
 }
@@ -302,6 +304,16 @@ fn step_fx29_points_index_at_font_glyph() {
         .map(|r| (0..4).fold(0, |acc, col| acc << 1 | u8::from(c.display[r * DISPLAY_WIDTH + col])))
         .collect();
     assert_eq!(rows, [0b1111, 0b1001, 0b1111, 0b1001, 0b1001]);
+}
+
+#[test]
+fn step_dxyn_waits_for_next_frame() {
+    // Two draws in a row: the second blocks until the next frame.
+    let mut c = run(&[0xA2, 0x06, 0xD0, 0x11, 0xD0, 0x11, 0x80], 3);
+    assert_eq!(c.pc, PROGRAM_START + 4, "second draw is waiting");
+    c.tick_timers();
+    c.step().unwrap();
+    assert_eq!(c.pc, PROGRAM_START + 6);
 }
 
 // --- Timers ---

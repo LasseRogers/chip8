@@ -91,6 +91,8 @@ pub struct Chip8 {
     keys: [bool; KEY_COUNT],
     /// Key pressed during an `FX0A` wait; the wait ends when it is released.
     held_key: Option<u8>,
+    /// Set each frame by `tick_timers`; `DXYN` consumes it.
+    frame_ready: bool,
 }
 
 impl Chip8 {
@@ -116,6 +118,7 @@ impl Chip8 {
             sound_timer: 0,
             keys: [false; KEY_COUNT],
             held_key: None,
+            frame_ready: true,
         }
     }
 
@@ -134,10 +137,12 @@ impl Chip8 {
         &self.display
     }
 
-    /// Decrements both timers towards zero. Call at 60 Hz.
+    /// Advances one 60 Hz frame: decrements both timers towards zero and
+    /// releases a draw blocked by the display wait. Call once per frame.
     pub fn tick_timers(&mut self) {
         self.delay_timer = self.delay_timer.saturating_sub(1);
         self.sound_timer = self.sound_timer.saturating_sub(1);
+        self.frame_ready = true;
     }
 
     /// Whether the buzzer should be sounding.
@@ -191,7 +196,13 @@ impl Chip8 {
             // COSMAC VIP quirk: the offset is always V0, not VX.
             0xB => self.pc = nnn + u16::from(self.v[0]),
             0xC => self.v[x] = self.rng.next_u8() & nn,
-            0xD => self.draw_sprite(x, y, n),
+            // COSMAC VIP quirk: drawing waits for vblank, so at most one
+            // sprite per frame. Blocking rewinds `pc`, as in `FX0A`.
+            0xD if !self.frame_ready => self.pc -= 2,
+            0xD => {
+                self.draw_sprite(x, y, n);
+                self.frame_ready = false;
+            }
             // Only the low nibble of VX selects a key.
             0xE if nn == 0x9E => self.skip_if(self.keys[usize::from(self.v[x] & 0xF)]),
             0xE if nn == 0xA1 => self.skip_if(!self.keys[usize::from(self.v[x] & 0xF)]),
