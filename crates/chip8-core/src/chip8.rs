@@ -17,6 +17,29 @@ const STACK_DEPTH: usize = 16;
 /// Seed used by `new`; fixed so default runs are reproducible.
 const DEFAULT_SEED: u64 = 0;
 
+const FONT_START: usize = 0x050;
+const FONT_GLYPH_SIZE: usize = 5;
+/// Built-in 4x5 sprites for hex digits 0..F, one byte per row.
+#[rustfmt::skip]
+const FONT: [u8; 16 * FONT_GLYPH_SIZE] = [
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+];
+
 /// ROM exceeds `MAX_ROM_SIZE`; holds the rejected size in bytes.
 #[derive(Debug, PartialEq, Eq)]
 pub struct RomTooLarge(pub usize);
@@ -69,8 +92,10 @@ impl Chip8 {
 
     /// Creates a machine in its power-on state; `seed` drives `CXNN`.
     pub fn with_seed(seed: u64) -> Self {
+        let mut memory = [0; MEMORY_SIZE];
+        memory[FONT_START..FONT_START + FONT.len()].copy_from_slice(&FONT);
         Self {
-            memory: [0; MEMORY_SIZE],
+            memory,
             pc: PROGRAM_START,
             v: [0; REGISTER_COUNT],
             i: 0,
@@ -183,6 +208,8 @@ impl Chip8 {
         match nn {
             // VF is not affected (COSMAC VIP behaviour).
             0x1E => self.i += u16::from(self.v[x]),
+            // Only the low nibble of VX selects a glyph.
+            0x29 => self.i = (FONT_START + usize::from(self.v[x] & 0xF) * FONT_GLYPH_SIZE) as u16,
             // Hundreds, tens and ones digits of VX at I, I+1, I+2.
             0x33 => {
                 let vx = self.v[x];

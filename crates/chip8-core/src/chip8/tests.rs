@@ -291,3 +291,15 @@ fn step_dxyn_sets_vf_on_collision() {
     assert!(!c.display[0]);
     assert_eq!(c.v[0xF], 1);
 }
+
+#[test]
+fn step_fx29_points_index_at_font_glyph() {
+    // V0 = 0xA, then F029; draw 5 rows at (V1, V2) = (0, 0).
+    let c = run(&[0x60, 0x0A, 0xF0, 0x29, 0xD1, 0x25], 3);
+    assert_eq!(usize::from(c.i), FONT_START + 0xA * FONT_GLYPH_SIZE);
+    // First 4 pixels of each row, read as bits.
+    let rows: Vec<u8> = (0..5)
+        .map(|r| (0..4).fold(0, |acc, col| acc << 1 | u8::from(c.display[r * DISPLAY_WIDTH + col])))
+        .collect();
+    assert_eq!(rows, [0b1111, 0b1001, 0b1111, 0b1001, 0b1001]);
+}
