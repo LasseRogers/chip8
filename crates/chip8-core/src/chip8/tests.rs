@@ -2,9 +2,14 @@
 
 use super::*;
 
-/// Loads `rom` into a fresh machine and executes `steps` instructions.
+/// Loads `rom` into a fresh COSMAC machine and executes `steps` instructions.
 fn run(rom: &[u8], steps: usize) -> Chip8 {
-    let mut c = Chip8::new();
+    run_with(Quirks::COSMAC, rom, steps)
+}
+
+/// Like `run`, with the given interpreter quirks.
+fn run_with(quirks: Quirks, rom: &[u8], steps: usize) -> Chip8 {
+    let mut c = Chip8::new().with_quirks(quirks);
     c.load_rom(rom).unwrap();
     for _ in 0..steps {
         c.step().unwrap();
@@ -443,4 +448,49 @@ fn step_fx1e_wraps_index_instead_of_overflowing() {
         2 + 2 * 300,
     );
     assert_eq!(u32::from(c.i), (0xFFF + 300 * 0xFF) % 0x1_0000);
+}
+
+// --- SUPER-CHIP quirks ---
+
+#[test]
+fn super_chip_logic_ops_keep_vf() {
+    // V0 = 0x0C, V1 = 0x0A, VF = 1, then 8011 (OR).
+    let c = run_with(
+        Quirks::SUPER_CHIP,
+        &[0x60, 0x0C, 0x61, 0x0A, 0x6F, 0x01, 0x80, 0x11],
+        4,
+    );
+    assert_eq!(c.v[0xF], 1);
+}
+
+#[test]
+fn super_chip_shifts_vx_in_place() {
+    // V0 = 0x81, V1 = 0xFF (must be ignored), then 8016 (shift right).
+    let c = run_with(Quirks::SUPER_CHIP, &[0x60, 0x81, 0x61, 0xFF, 0x80, 0x16], 3);
+    assert_eq!((c.v[0], c.v[0xF]), (0x40, 1));
+}
+
+#[test]
+fn super_chip_memory_ops_leave_index() {
+    // I = 0x300, then F255.
+    let c = run_with(Quirks::SUPER_CHIP, &[0xA3, 0x00, 0xF2, 0x55], 2);
+    assert_eq!(c.i, 0x300);
+}
+
+#[test]
+fn super_chip_jump_uses_vx() {
+    // V0 = 0x10, V2 = 0x30, then B200: XNN + VX = 0x200 + V2.
+    let c = run_with(Quirks::SUPER_CHIP, &[0x60, 0x10, 0x62, 0x30, 0xB2, 0x00], 3);
+    assert_eq!(c.pc, 0x230);
+}
+
+#[test]
+fn super_chip_draws_without_waiting_for_frame() {
+    // Two draws in a row both run within the same frame.
+    let c = run_with(
+        Quirks::SUPER_CHIP,
+        &[0xA2, 0x06, 0xD0, 0x11, 0xD0, 0x11, 0x80],
+        3,
+    );
+    assert_eq!(c.pc, PROGRAM_START + 6);
 }

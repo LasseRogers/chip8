@@ -74,6 +74,47 @@ impl fmt::Display for ExecError {
 
 impl std::error::Error for ExecError {}
 
+/// Behaviour that differs between CHIP-8 interpreters. Each ROM expects one set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Quirks {
+    /// `8XY1`/`8XY2`/`8XY3` reset VF to 0.
+    pub vf_reset: bool,
+    /// `FX55`/`FX65` advance I past the copied registers.
+    pub memory_increments_i: bool,
+    /// `DXYN` waits for the next frame, so at most one draw per frame.
+    pub display_wait: bool,
+    /// `8XY6`/`8XYE` shift VY into VX; otherwise VX is shifted in place.
+    pub shift_reads_vy: bool,
+    /// `BNNN` jumps to NNN + V0; otherwise it reads as BXNN, jumping to XNN + VX.
+    pub jump_uses_v0: bool,
+}
+
+impl Quirks {
+    /// The original COSMAC VIP interpreter (1977).
+    pub const COSMAC: Self = Self {
+        vf_reset: true,
+        memory_increments_i: true,
+        display_wait: true,
+        shift_reads_vy: true,
+        jump_uses_v0: true,
+    };
+
+    /// SUPER-CHIP (1991), as most HP48-era games expect, e.g. David Winter's.
+    pub const SUPER_CHIP: Self = Self {
+        vf_reset: false,
+        memory_increments_i: false,
+        display_wait: false,
+        shift_reads_vy: false,
+        jump_uses_v0: false,
+    };
+}
+
+impl Default for Quirks {
+    fn default() -> Self {
+        Self::COSMAC
+    }
+}
+
 pub struct Chip8 {
     memory: [u8; MEMORY_SIZE],
     pc: u16,
@@ -99,6 +140,7 @@ pub struct Chip8 {
     held_key: Option<u8>,
     /// Set each frame by `tick_timers`; `DXYN` consumes it.
     frame_ready: bool,
+    quirks: Quirks,
 }
 
 impl Chip8 {
@@ -125,7 +167,14 @@ impl Chip8 {
             keys: [false; KEY_COUNT],
             held_key: None,
             frame_ready: true,
+            quirks: Quirks::COSMAC,
         }
+    }
+
+    /// Switches to another interpreter's behaviour; the default is `Quirks::COSMAC`.
+    pub fn with_quirks(mut self, quirks: Quirks) -> Self {
+        self.quirks = quirks;
+        self
     }
 
     /// Copies `rom` into memory at `PROGRAM_START`.
@@ -213,12 +262,19 @@ impl Chip8 {
             0x8 => self.alu(op, x, y, n)?,
             0x9 if n == 0 => self.skip_if(self.v[x] != self.v[y]),
             0xA => self.i = nnn,
-            // COSMAC VIP quirk: the offset is always V0, not VX.
-            0xB => self.pc = nnn + u16::from(self.v[0]),
+            // COSMAC VIP: NNN + V0; later interpreters read it as XNN + VX.
+            0xB => {
+                let offset = if self.quirks.jump_uses_v0 {
+                    self.v[0]
+                } else {
+                    self.v[x]
+                };
+                self.pc = nnn + u16::from(offset);
+            }
             0xC => self.v[x] = self.rng.next_u8() & nn,
             // COSMAC VIP quirk: drawing waits for vblank, so at most one
             // sprite per frame. Blocking rewinds `pc`, as in `FX0A`.
-            0xD if !self.frame_ready => self.pc -= 2,
+            0xD if self.quirks.display_wait && !self.frame_ready => self.pc -= 2,
             0xD => {
                 self.draw_sprite(x, y, n);
                 self.frame_ready = false;
@@ -235,20 +291,25 @@ impl Chip8 {
     /// Executes the `8XYN` register-to-register family.
     fn alu(&mut self, op: u16, x: usize, y: usize, n: usize) -> Result<(), ExecError> {
         let vy = self.v[y];
+        // Shift source: VY on the COSMAC VIP, VX in place on later interpreters.
+        let src = if self.quirks.shift_reads_vy {
+            vy
+        } else {
+            self.v[x]
+        };
         match n {
             0x0 => self.v[x] = vy,
-            // COSMAC VIP quirk: the logic ops also reset VF.
             0x1 => {
                 self.v[x] |= vy;
-                self.v[0xF] = 0;
+                self.apply_vf_reset();
             }
             0x2 => {
                 self.v[x] &= vy;
-                self.v[0xF] = 0;
+                self.apply_vf_reset();
             }
             0x3 => {
                 self.v[x] ^= vy;
-                self.v[0xF] = 0;
+                self.apply_vf_reset();
             }
             0x4 => {
                 let (sum, carry) = self.v[x].overflowing_add(vy);
@@ -258,13 +319,12 @@ impl Chip8 {
                 let (diff, borrow) = self.v[x].overflowing_sub(vy);
                 self.set_with_flag(x, diff, !borrow);
             }
-            // COSMAC VIP quirk: shifts read VY, not VX.
-            0x6 => self.set_with_flag(x, vy >> 1, vy & 0x01 != 0),
+            0x6 => self.set_with_flag(x, src >> 1, src & 0x01 != 0),
             0x7 => {
                 let (diff, borrow) = vy.overflowing_sub(self.v[x]);
                 self.set_with_flag(x, diff, !borrow);
             }
-            0xE => self.set_with_flag(x, vy << 1, vy & 0x80 != 0),
+            0xE => self.set_with_flag(x, src << 1, src & 0x80 != 0),
             _ => return Err(ExecError::UnknownOpcode(op)),
         }
         Ok(())
@@ -288,16 +348,20 @@ impl Chip8 {
                 let i = usize::from(self.i);
                 self.memory[mem_range(i, 3)?].copy_from_slice(&[vx / 100, vx / 10 % 10, vx % 10]);
             }
-            // COSMAC VIP quirk: I advances past the copied bytes.
+            // COSMAC VIP: I advances past the copied bytes; later interpreters leave it.
             0x55 => {
                 let i = usize::from(self.i);
                 self.memory[mem_range(i, x + 1)?].copy_from_slice(&self.v[..=x]);
-                self.i += x as u16 + 1;
+                if self.quirks.memory_increments_i {
+                    self.i += x as u16 + 1;
+                }
             }
             0x65 => {
                 let i = usize::from(self.i);
                 self.v[..=x].copy_from_slice(&self.memory[mem_range(i, x + 1)?]);
-                self.i += x as u16 + 1;
+                if self.quirks.memory_increments_i {
+                    self.i += x as u16 + 1;
+                }
             }
             _ => return Err(ExecError::UnknownOpcode(op)),
         }
@@ -317,6 +381,13 @@ impl Chip8 {
             None => self.held_key = self.keys.iter().position(|&k| k).map(|k| k as u8),
         }
         self.pc -= 2;
+    }
+
+    /// COSMAC VIP quirk: the logic ops `8XY1`-`8XY3` also reset VF.
+    fn apply_vf_reset(&mut self) {
+        if self.quirks.vf_reset {
+            self.v[0xF] = 0;
+        }
     }
 
     /// Writes `value` to Vx, then `flag` to VF, so the flag wins when x is F.
