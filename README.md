@@ -1,5 +1,7 @@
 # A CHIP-8 emulator in Rust, and DQN agents written from scratch in PyTorch.
 
+[![CI](https://github.com/LasseRogers/chip8/actions/workflows/ci.yml/badge.svg)](https://github.com/LasseRogers/chip8/actions/workflows/ci.yml)
+
 ![Trained DQN agent playing Pong](docs/pong-demo.gif)
 
 | Path | Contents |
