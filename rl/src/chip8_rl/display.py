@@ -44,3 +44,50 @@ def draw_q_values(
         surface.blit(font.render(f"{q:+.3f}", True, color), (rect.right - Q_VALUE_WIDTH + 8, y + 4))
         widths.append(width)
     return widths
+
+
+CHART_TITLE_HEIGHT = 20
+CHART_BORDER_COLOR = (50, 50, 50)
+
+
+def draw_line_chart(
+    surface: pygame.Surface,
+    rect: pygame.Rect,
+    title: str,
+    series: list[tuple[list[float], tuple[int, int, int]]],
+    font: pygame.font.Font,
+) -> pygame.Rect:
+    """Draws each (values, color) series in `rect` on a shared y-range; returns the plot area.
+
+    The title shows the latest value of the last non-empty series.
+    """
+    pygame.draw.rect(surface, CHART_BORDER_COLOR, rect, width=1)
+    latest = next((values[-1] for values, _ in reversed(series) if values), None)
+    label = title if latest is None else f"{title}   {latest:.3g}"
+    surface.blit(font.render(label, True, TEXT_COLOR), (rect.left + 6, rect.top + 4))
+    plot = pygame.Rect(
+        rect.left + 6,
+        rect.top + CHART_TITLE_HEIGHT + 4,
+        rect.width - 12,
+        rect.height - CHART_TITLE_HEIGHT - 10,
+    )
+
+    points = [v for values, _ in series for v in values]
+    if len(points) < 2:
+        return plot
+    lo, hi = min(points), max(points)
+    span = (hi - lo) or 1.0
+
+    def y(value: float) -> float:
+        return plot.bottom - 1 - (value - lo) / span * (plot.height - 1)
+
+    if lo < 0 < hi:
+        pygame.draw.line(surface, CHART_BORDER_COLOR, (plot.left, y(0)), (plot.right - 1, y(0)))
+    for values, color in series:
+        if len(values) < 2:
+            continue
+        step = (plot.width - 1) / (len(values) - 1)
+        pygame.draw.lines(
+            surface, color, False, [(plot.left + i * step, y(v)) for i, v in enumerate(values)], 2
+        )
+    return plot
