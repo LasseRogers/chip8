@@ -1,5 +1,9 @@
 """Deep Q-Network components."""
 
+import math
+from typing import NamedTuple
+
+import numpy as np
 import torch
 from torch import nn
 
@@ -31,3 +35,65 @@ class QNetwork(nn.Module):
         """`screens`: uint8 (batch, frames, 32, 64) of 0/1 pixels."""
         # Pixels are already 0/1, so no scaling: just make them floats.
         return self.layers(screens.float())
+
+
+class Batch(NamedTuple):
+    obs: np.ndarray  # uint8 (batch, *obs_shape)
+    actions: np.ndarray  # int64 (batch,)
+    rewards: np.ndarray  # float32 (batch,)
+    next_obs: np.ndarray  # uint8 (batch, *obs_shape)
+    dones: np.ndarray  # bool (batch,): episode terminated, not truncated
+
+
+class ReplayBuffer:
+    """Fixed-size ring buffer of transitions for experience replay.
+
+    Screens hold only 0/1 pixels, so they are bit-packed (8 per byte):
+    100k transitions take ~200 MB instead of ~1.6 GB.
+    """
+
+    def __init__(self, capacity: int, obs_shape: tuple[int, ...]) -> None:
+        self.capacity = capacity
+        self._obs_shape = obs_shape
+        self._pixels = math.prod(obs_shape)
+        packed_size = (self._pixels + 7) // 8
+        self._obs = np.zeros((capacity, packed_size), dtype=np.uint8)
+        self._next_obs = np.zeros((capacity, packed_size), dtype=np.uint8)
+        self._actions = np.zeros(capacity, dtype=np.int64)
+        self._rewards = np.zeros(capacity, dtype=np.float32)
+        self._dones = np.zeros(capacity, dtype=np.bool_)
+        self._next = 0
+        self._size = 0
+
+    def __len__(self) -> int:
+        return self._size
+
+    def add(self, obs: np.ndarray, action: int, reward: float, next_obs: np.ndarray, done: bool) -> None:
+        """Stores a transition, overwriting the oldest once full.
+
+        `done` must be True only when the episode terminated; a truncated
+        episode's next state still has future value.
+        """
+        i = self._next
+        self._obs[i] = np.packbits(obs)
+        self._next_obs[i] = np.packbits(next_obs)
+        self._actions[i] = action
+        self._rewards[i] = reward
+        self._dones[i] = done
+        self._next = (i + 1) % self.capacity
+        self._size = min(self._size + 1, self.capacity)
+
+    def sample(self, batch_size: int, rng: np.random.Generator) -> Batch:
+        """Uniformly samples `batch_size` stored transitions, with replacement."""
+        idx = rng.integers(0, self._size, size=batch_size)
+        return Batch(
+            obs=self._unpack(self._obs[idx]),
+            actions=self._actions[idx],
+            rewards=self._rewards[idx],
+            next_obs=self._unpack(self._next_obs[idx]),
+            dones=self._dones[idx],
+        )
+
+    def _unpack(self, packed: np.ndarray) -> np.ndarray:
+        pixels = np.unpackbits(packed, axis=1, count=self._pixels)
+        return pixels.reshape(-1, *self._obs_shape)
