@@ -1,6 +1,6 @@
 //! Python bindings for `chip8-core`.
 
-use chip8_core::{Chip8, ExecError, RomTooLarge};
+use chip8_core::{Chip8, DEFAULT_INSTRUCTIONS_PER_FRAME, ExecError, RomTooLarge};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -30,8 +30,7 @@ impl PyChip8 {
     }
 
     /// Runs one 60 Hz frame: `instructions` steps, then a timer tick.
-    /// The default matches the desktop frontend's speed.
-    #[pyo3(signature = (instructions = 12))]
+    #[pyo3(signature = (instructions = DEFAULT_INSTRUCTIONS_PER_FRAME))]
     fn run_frame(&mut self, instructions: usize) -> PyResult<()> {
         self.0.run_frame(instructions).map_err(exec_error)
     }

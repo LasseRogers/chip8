@@ -12,6 +12,8 @@ pub const MAX_ROM_SIZE: usize = MEMORY_SIZE - PROGRAM_START as usize;
 
 pub const DISPLAY_WIDTH: usize = 64;
 pub const DISPLAY_HEIGHT: usize = 32;
+/// ~700 instructions/s at 60 frames/s, the conventional CHIP-8 speed.
+pub const DEFAULT_INSTRUCTIONS_PER_FRAME: usize = 12;
 
 const REGISTER_COUNT: usize = 16;
 const STACK_DEPTH: usize = 16;

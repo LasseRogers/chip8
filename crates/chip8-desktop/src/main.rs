@@ -6,14 +6,12 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use chip8_core::{Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH};
+use chip8_core::{Chip8, DEFAULT_INSTRUCTIONS_PER_FRAME, DISPLAY_HEIGHT, DISPLAY_WIDTH};
 use minifb::{Key, Scale, Window, WindowOptions};
 
 const USAGE: &str = "usage: chip8-desktop <rom> [--seed N]";
 const PIXEL_ON: u32 = 0x00FF_FFFF;
 const PIXEL_OFF: u32 = 0x0000_0000;
-/// ~700 instructions/s at 60 fps, the conventional CHIP-8 speed.
-const INSTRUCTIONS_PER_FRAME: usize = 12;
 
 /// Conventional layout: the left 4x4 block of a QWERTY keyboard
 /// mirrors the COSMAC VIP hex keypad.
@@ -81,7 +79,7 @@ fn main() -> ExitCode {
             chip8.set_key(chip8_key, window.is_key_down(key));
         }
         // One emulated frame per window refresh: timers tick at 60 Hz.
-        if let Err(e) = chip8.run_frame(INSTRUCTIONS_PER_FRAME) {
+        if let Err(e) = chip8.run_frame(DEFAULT_INSTRUCTIONS_PER_FRAME) {
             eprintln!("{e}");
             return ExitCode::FAILURE;
         }

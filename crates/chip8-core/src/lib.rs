@@ -6,4 +6,6 @@
 mod chip8;
 mod rng;
 
-pub use chip8::{Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH, ExecError, RomTooLarge};
+pub use chip8::{
+    Chip8, DEFAULT_INSTRUCTIONS_PER_FRAME, DISPLAY_HEIGHT, DISPLAY_WIDTH, ExecError, RomTooLarge,
+};
