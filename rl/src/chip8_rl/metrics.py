@@ -24,3 +24,8 @@ class MetricsReader:
         complete = data[: data.rfind(b"\n") + 1]
         self._offset += len(complete)
         return [json.loads(line) for line in complete.splitlines()]
+
+
+def format_info(info: dict) -> str:
+    """A game's info dict as `key=value` pairs, for logs and status lines."""
+    return " ".join(f"{key}={value}" for key, value in info.items())

@@ -14,6 +14,7 @@ import torch
 from chip8_rl.device import best_device
 from chip8_rl.dqn import QNetwork, ReplayBuffer, dqn_update, linear_epsilon, select_action
 from chip8_rl.envs import make_env
+from chip8_rl.metrics import format_info
 from chip8_rl.video import record_clip
 
 CHECKPOINT_NAME = "latest.pt"
@@ -113,7 +114,7 @@ def train(cfg: Config, run_dir: Path) -> None:
                 if steps_done % cfg.video_every == 0:
                     clip = run_dir / VIDEOS_DIR / f"step-{steps_done:07d}.mp4"
                     result = record_clip(online, cfg.game, clip, seed=cfg.seed)
-                    print(f"recorded {clip} ({_describe(result)})", flush=True)
+                    print(f"recorded {clip} ({format_info(result)})", flush=True)
 
                 if terminated or truncated:
                     episode += 1
@@ -137,15 +138,11 @@ def train(cfg: Config, run_dir: Path) -> None:
             save_checkpoint(checkpoint, online, cfg, steps_done)
 
 
-def _describe(info: dict) -> str:
-    return " ".join(f"{key}={value}" for key, value in info.items())
-
-
 def _format(record: dict, avg_reward: float) -> str:
     loss = f"{record['loss']:.4f}" if record["loss"] is not None else "  -   "
     return (
         f"episode {record['episode']:>4}  step {record['step']:>7,}  eps {record['epsilon']:.2f}  "
-        f"{_describe(record['info'])}  "
+        f"{format_info(record['info'])}  "
         f"reward {record['reward']:+3.0f}  avg20 {avg_reward:+5.1f}  "
         f"loss {loss}  {record['step'] / record['elapsed']:,.0f} steps/s"
     )

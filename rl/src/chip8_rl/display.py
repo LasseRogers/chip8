@@ -10,7 +10,7 @@ def blit_frame(surface: pygame.Surface, frame: np.ndarray, pos: tuple[int, int] 
     surface.blit(pygame.surfarray.make_surface(frame.swapaxes(0, 1)), pos)
 
 
-Q_LABEL_WIDTH = 70
+Q_LABEL_WIDTH = 90
 Q_VALUE_WIDTH = 70
 TEXT_COLOR = (200, 200, 200)
 MUTED_COLOR = (90, 90, 90)

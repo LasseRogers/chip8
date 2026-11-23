@@ -1,6 +1,6 @@
 """Tests for MetricsReader."""
 
-from chip8_rl.metrics import MetricsReader
+from chip8_rl.metrics import MetricsReader, format_info
 
 
 def test_reads_only_new_complete_lines(tmp_path):
@@ -15,3 +15,7 @@ def test_reads_only_new_complete_lines(tmp_path):
         f.write('sode": 3}\n')
     assert [r["episode"] for r in reader.read_new()] == [3]
     assert reader.read_new() == []
+
+
+def test_format_info_lists_key_value_pairs():
+    assert format_info({"agent_score": 9, "opponent_score": 3}) == "agent_score=9 opponent_score=3"

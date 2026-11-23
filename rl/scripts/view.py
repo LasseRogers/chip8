@@ -1,11 +1,11 @@
-"""Watch a training run's latest checkpoint play Pong, live.
+"""Watch a training run's latest checkpoint play its game, live.
 
 Usage: uv run python scripts/view.py RUN_DIR
 
-Between games, reloads the checkpoint if training has saved a newer one,
-so the window follows a run while it trains. Beside the game, a panel shows
-the network's Q-value for each action at every decision; below, the run's
-training curves update as episodes finish.
+The game comes from the run's checkpoint. Between games, the checkpoint is
+reloaded if training has saved a newer one, so the window follows a run while
+it trains. A panel beside the game shows the network's Q-value for each action
+at every decision; below, the run's training curves update as episodes finish.
 """
 
 import argparse
@@ -30,7 +30,7 @@ from chip8_rl.display import (
 )
 from chip8_rl.dqn import EVAL_EPSILON, select_action
 from chip8_rl.envs import make_env
-from chip8_rl.metrics import MetricsReader
+from chip8_rl.metrics import MetricsReader, format_info
 from chip8_rl.train import CHECKPOINT_NAME, METRICS_NAME, load_checkpoint
 
 FPS = 15  # Decisions per second: real game speed with frame skip 4.
@@ -38,12 +38,21 @@ METRICS_POLL_SECONDS = 2.0
 AVERAGE_WINDOW = 20  # Matches the trainer's avg20.
 STATUS_HEIGHT = 28
 PANEL_WIDTH = 280
+Q_ROW_HEIGHT = 32  # Fits six actions beside the game.
 CHART_HEIGHT = 160
 PADDING = 16
 
 
 def quit_requested() -> bool:
     return any(event.type == pygame.QUIT for event in pygame.event.get())
+
+
+def wait_for(path: Path) -> None:
+    """Blocks until `path` exists; training saves its first checkpoint after 10k steps."""
+    if not path.exists():
+        print(f"waiting for {path} ...", flush=True)
+    while not path.exists():
+        time.sleep(0.5)
 
 
 class Viewer:
@@ -74,23 +83,15 @@ class Viewer:
             if record["loss"] is not None:  # No loss before learning starts.
                 self.losses.append(record["loss"])
 
-    def draw(
-        self,
-        status: str,
-        frame: np.ndarray | None = None,
-        q_values: np.ndarray | None = None,
-        action: int = 0,
-    ) -> None:
+    def draw(self, status: str, frame: np.ndarray, q_values: np.ndarray, action: int) -> None:
         self.window.fill((0, 0, 0))
-        if frame is not None:
-            blit_frame(self.window, frame)
-        if q_values is not None:
-            left = self.game_width + PADDING
-            self.window.blit(self.font.render("Q-values", True, TEXT_COLOR), (left, PADDING))
-            panel = pygame.Rect(
-                left, PADDING + 28, PANEL_WIDTH - 2 * PADDING, 36 * len(self.labels)
-            )
-            draw_q_values(self.window, panel, self.labels, q_values, action, self.font)
+        blit_frame(self.window, frame)
+        left = self.game_width + PADDING
+        self.window.blit(self.font.render("Q-values", True, TEXT_COLOR), (left, PADDING))
+        panel = pygame.Rect(
+            left, PADDING + 28, PANEL_WIDTH - 2 * PADDING, Q_ROW_HEIGHT * len(self.labels)
+        )
+        draw_q_values(self.window, panel, self.labels, q_values, action, self.font)
         self.window.blit(self.font.render(status, True, TEXT_COLOR), (8, self.game_height + 6))
         self._draw_charts()
         pygame.display.flip()
@@ -113,32 +114,24 @@ class Viewer:
 
 def view(run_dir: Path) -> None:
     checkpoint = run_dir / CHECKPOINT_NAME
-    metrics = MetricsReader(run_dir / METRICS_NAME)
+    wait_for(checkpoint)
     device = best_device()
-    rng = np.random.default_rng()
-    env = make_env("pong", render_mode="rgb_array")
+    loaded_mtime = checkpoint.stat().st_mtime
+    net, data = load_checkpoint(checkpoint, device)
+    step = data["step"]
+    # Runs from before multi-game support saved no game in their config.
+    game = data["config"].get("game", "pong")
+
+    env = make_env(game, render_mode="rgb_array")
     env.reset()
     height, width, _ = env.render().shape
-    viewer = Viewer((width, height), env.unwrapped.action_names, f"chip8 viewer: {run_dir}")
+    viewer = Viewer((width, height), env.unwrapped.action_names, f"chip8 viewer: {game}, {run_dir}")
+    metrics = MetricsReader(run_dir / METRICS_NAME)
+    rng = np.random.default_rng()
     clock = pygame.time.Clock()
-    net, step, loaded_mtime = None, 0, None
     last_poll = 0.0
 
-    def poll_metrics() -> None:
-        nonlocal last_poll
-        if time.monotonic() - last_poll >= METRICS_POLL_SECONDS:
-            viewer.add_records(metrics.read_new())
-            last_poll = time.monotonic()
-
     while True:
-        # Wait for the first checkpoint; training saves one every 10k steps.
-        while not checkpoint.exists():
-            poll_metrics()
-            viewer.draw(f"waiting for {checkpoint} ...")
-            if quit_requested():
-                return
-            time.sleep(0.5)
-
         mtime = checkpoint.stat().st_mtime
         if mtime != loaded_mtime:
             net, data = load_checkpoint(checkpoint, device)
@@ -149,18 +142,19 @@ def view(run_dir: Path) -> None:
         while not done:
             if quit_requested():
                 return
-            poll_metrics()
+            if time.monotonic() - last_poll >= METRICS_POLL_SECONDS:
+                viewer.add_records(metrics.read_new())
+                last_poll = time.monotonic()
             action, q_values = select_action(net, obs, EVAL_EPSILON, rng)
             obs, _, terminated, truncated, info = env.step(action)
             done = terminated or truncated
-            score = f"{info['agent_score']} - {info['opponent_score']}"
-            status = f"checkpoint step {step:,}   |   score {score}"
+            status = f"checkpoint step {step:,}   |   {format_info(info)}"
             viewer.draw(status, env.render(), q_values, action)
             clock.tick(FPS)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Watch a run's latest checkpoint play Pong.")
+    parser = argparse.ArgumentParser(description="Watch a run's latest checkpoint play its game.")
     parser.add_argument("run_dir", type=Path)
     args = parser.parse_args()
     try:
