@@ -4,5 +4,6 @@
 //! Callers drive execution and read state through the public API.
 
 mod chip8;
+mod rng;
 
 pub use chip8::{Chip8, DISPLAY_HEIGHT, DISPLAY_WIDTH, ExecError, RomTooLarge};
