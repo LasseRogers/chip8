@@ -1,5 +1,10 @@
 """Tests for PongEnv."""
 
+import os
+
+# Exercise the human render path without opening real windows.
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+
 import gymnasium as gym
 import numpy as np
 import pytest
@@ -52,3 +57,11 @@ def test_rgb_array_render_is_upscaled_screen():
     assert frame.shape == (32 * RENDER_SCALE, 64 * RENDER_SCALE, 3)
     assert frame.dtype == np.uint8
     assert (frame[::RENDER_SCALE, ::RENDER_SCALE, 0] == obs * 255).all()
+
+
+def test_human_render_runs_and_closes():
+    env = gym.make(PONG_ID, render_mode="human")
+    env.reset(seed=0)
+    for _ in range(3):
+        env.step(0)
+    env.close()

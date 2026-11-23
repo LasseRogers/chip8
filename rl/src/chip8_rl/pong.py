@@ -3,6 +3,7 @@
 The agent controls the left paddle against the ROM's built-in opponent.
 """
 
+import os
 from pathlib import Path
 
 import chip8
@@ -23,7 +24,7 @@ RENDER_SCALE = 8
 
 
 class PongEnv(gym.Env):
-    metadata = {"render_modes": ["rgb_array"], "render_fps": 60 // FRAME_SKIP}
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60 // FRAME_SKIP}
 
     # Action index -> CHIP-8 key held during the step; None holds nothing.
     ACTION_KEYS = (None, 0x1, 0x4)  # noop, up, down
@@ -32,6 +33,8 @@ class PongEnv(gym.Env):
         if render_mode not in (None, *self.metadata["render_modes"]):
             raise ValueError(f"unsupported render_mode: {render_mode!r}")
         self.render_mode = render_mode
+        self._window = None
+        self._clock = None
         self._rom = Path(rom_path).read_bytes()
         self._chip8: chip8.Chip8 | None = None
         self.action_space = spaces.Discrete(len(self.ACTION_KEYS))
@@ -42,6 +45,8 @@ class PongEnv(gym.Env):
         # Seed the emulator from Gymnasium's RNG so reset(seed=...) is reproducible.
         self._chip8 = chip8.Chip8(seed=int(self.np_random.integers(2**63)))
         self._chip8.load_rom(self._rom)
+        if self.render_mode == "human":
+            self._draw_window()
         return self._observation(), self._info()
 
     def step(self, action: int):
@@ -58,12 +63,39 @@ class PongEnv(gym.Env):
         agent, opponent = self._scores()
         reward = float((agent - agent_before) - (opponent - opponent_before))
         terminated = WIN_SCORE in (agent, opponent)
+        if self.render_mode == "human":
+            self._draw_window()
         return self._observation(), reward, terminated, False, self._info()
 
     def render(self) -> np.ndarray | None:
         if self.render_mode == "rgb_array":
             return self._frame()
+        if self.render_mode == "human":
+            self._draw_window()
         return None
+
+    def close(self) -> None:
+        if self._window is not None:
+            import pygame
+
+            pygame.display.quit()
+            self._window = None
+
+    def _draw_window(self) -> None:
+        """Shows the current frame and paces the loop to real time."""
+        os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+        import pygame  # Imported lazily: only human mode needs a display.
+
+        if self._window is None:
+            pygame.display.init()  # Display only; full init also opens audio.
+            self._window = pygame.display.set_mode((64 * RENDER_SCALE, 32 * RENDER_SCALE))
+            pygame.display.set_caption("chip8/Pong-v0")
+            self._clock = pygame.time.Clock()
+        pygame.event.pump()  # Keeps the window responsive.
+        # pygame indexes surfaces as (x, y); numpy frames are (y, x).
+        self._window.blit(pygame.surfarray.make_surface(self._frame().swapaxes(0, 1)), (0, 0))
+        pygame.display.flip()
+        self._clock.tick(self.metadata["render_fps"])
 
     def _frame(self) -> np.ndarray:
         """The screen as an upscaled RGB image, white on black."""
