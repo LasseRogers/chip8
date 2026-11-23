@@ -145,6 +145,15 @@ impl Chip8 {
         self.frame_ready = true;
     }
 
+    /// Runs one 60 Hz frame: `instructions` steps, then a timer tick.
+    pub fn run_frame(&mut self, instructions: usize) -> Result<(), ExecError> {
+        for _ in 0..instructions {
+            self.step()?;
+        }
+        self.tick_timers();
+        Ok(())
+    }
+
     /// Whether the buzzer should be sounding.
     pub fn sound_active(&self) -> bool {
         self.sound_timer > 0
@@ -157,6 +166,11 @@ impl Chip8 {
     /// If `key` is greater than `0xF`.
     pub fn set_key(&mut self, key: u8, pressed: bool) {
         self.keys[usize::from(key)] = pressed;
+    }
+
+    /// The full 4 KiB address space, read-only.
+    pub fn memory(&self) -> &[u8] {
+        &self.memory
     }
 
     /// Reads the big-endian opcode at `pc` and advances past it.

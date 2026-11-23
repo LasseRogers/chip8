@@ -80,14 +80,11 @@ fn main() -> ExitCode {
         for &(key, chip8_key) in &KEYMAP {
             chip8.set_key(chip8_key, window.is_key_down(key));
         }
-        for _ in 0..INSTRUCTIONS_PER_FRAME {
-            if let Err(e) = chip8.step() {
-                eprintln!("{e}");
-                return ExitCode::FAILURE;
-            }
+        // One emulated frame per window refresh: timers tick at 60 Hz.
+        if let Err(e) = chip8.run_frame(INSTRUCTIONS_PER_FRAME) {
+            eprintln!("{e}");
+            return ExitCode::FAILURE;
         }
-        // One tick per frame: 60 Hz at the window's 60 fps.
-        chip8.tick_timers();
         render(chip8.display(), &mut buffer);
         if let Err(e) = window.update_with_buffer(&buffer, DISPLAY_WIDTH, DISPLAY_HEIGHT) {
             eprintln!("failed to update window: {e}");

@@ -49,6 +49,14 @@ fn step_rejects_unknown_opcode() {
     assert_eq!(run(&[0xFF, 0xFF], 0).step(), Err(ExecError::UnknownOpcode(0xFFFF)));
 }
 
+#[test]
+fn memory_exposes_rom_and_font() {
+    let c = run(&[0xAB, 0xCD], 0);
+    assert_eq!(c.memory().len(), MEMORY_SIZE);
+    assert_eq!(c.memory()[0x200..0x202], [0xAB, 0xCD]);
+    assert_eq!(c.memory()[FONT_START], FONT[0]);
+}
+
 // --- Flow control ---
 
 #[test]
@@ -373,4 +381,13 @@ fn step_fx0a_stores_key_on_release() {
     c.step().unwrap();
     assert_eq!(c.v[0], 0x7);
     assert_eq!(c.pc, PROGRAM_START + 2);
+}
+
+#[test]
+fn run_frame_executes_instructions_then_ticks() {
+    // V0 = 5; delay = V0; 0x204: jump to self.
+    let mut c = run(&[0x60, 0x05, 0xF0, 0x15, 0x12, 0x04], 0);
+    c.run_frame(3).unwrap();
+    assert_eq!(c.pc, 0x204);
+    assert_eq!(c.delay_timer, 4);
 }

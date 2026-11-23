@@ -1,6 +1,6 @@
 //! Python bindings for `chip8-core`.
 
-use chip8_core::{Chip8, RomTooLarge};
+use chip8_core::{Chip8, ExecError, RomTooLarge};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
@@ -26,7 +26,23 @@ impl PyChip8 {
 
     /// Executes one instruction. Raises `RuntimeError` on an execution error.
     fn step(&mut self) -> PyResult<()> {
-        self.0.step().map_err(|e| PyRuntimeError::new_err(e.to_string()))
+        self.0.step().map_err(exec_error)
+    }
+
+    /// Runs one 60 Hz frame: `instructions` steps, then a timer tick.
+    /// The default matches the desktop frontend's speed.
+    #[pyo3(signature = (instructions = 12))]
+    fn run_frame(&mut self, instructions: usize) -> PyResult<()> {
+        self.0.run_frame(instructions).map_err(exec_error)
+    }
+
+    /// `length` bytes of memory from `addr`. Raises `ValueError` if out of range.
+    fn read_memory<'py>(&self, py: Python<'py>, addr: usize, length: usize) -> PyResult<Bound<'py, PyBytes>> {
+        let bytes = addr
+            .checked_add(length)
+            .and_then(|end| self.0.memory().get(addr..end))
+            .ok_or_else(|| PyValueError::new_err(format!("out of range: {addr:#x} + {length}")))?;
+        Ok(PyBytes::new(py, bytes))
     }
 
     /// Presses or releases hex key `key` (0-15). Raises `ValueError` otherwise.
@@ -48,6 +64,10 @@ impl PyChip8 {
         let pixels: Vec<u8> = self.0.display().iter().map(|&p| u8::from(p)).collect();
         PyBytes::new(py, &pixels)
     }
+}
+
+fn exec_error(e: ExecError) -> PyErr {
+    PyRuntimeError::new_err(e.to_string())
 }
 
 #[pymodule]
