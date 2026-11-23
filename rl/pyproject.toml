@@ -1,0 +1,12 @@
+[project]
+name = "chip8-rl"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "chip8",
+    "gymnasium>=1.4.0",
+    "numpy>=2.5.5",
+]
+
+[tool.uv.sources]
+chip8 = { path = "../crates/chip8-py", editable = true }
