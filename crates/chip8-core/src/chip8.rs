@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use crate::rng::Rng;
+
 pub const MEMORY_SIZE: usize = 4096;
 pub const PROGRAM_START: u16 = 0x200;
 /// Largest ROM that fits between `PROGRAM_START` and the end of memory.
@@ -12,6 +14,8 @@ pub const DISPLAY_HEIGHT: usize = 32;
 
 const REGISTER_COUNT: usize = 16;
 const STACK_DEPTH: usize = 16;
+/// Seed used by `new`; fixed so default runs are reproducible.
+const DEFAULT_SEED: u64 = 0;
 
 /// ROM exceeds `MAX_ROM_SIZE`; holds the rejected size in bytes.
 #[derive(Debug, PartialEq, Eq)]
@@ -53,11 +57,18 @@ pub struct Chip8 {
     stack: [u16; STACK_DEPTH],
     /// Index of the next free stack slot.
     sp: usize,
+    /// Source for `CXNN`; seeded so runs can be replayed exactly.
+    rng: Rng,
 }
 
 impl Chip8 {
-    /// Creates a machine in its power-on state.
+    /// Creates a machine in its power-on state with a fixed RNG seed.
     pub fn new() -> Self {
+        Self::with_seed(DEFAULT_SEED)
+    }
+
+    /// Creates a machine in its power-on state; `seed` drives `CXNN`.
+    pub fn with_seed(seed: u64) -> Self {
         Self {
             memory: [0; MEMORY_SIZE],
             pc: PROGRAM_START,
@@ -66,6 +77,7 @@ impl Chip8 {
             display: [false; DISPLAY_WIDTH * DISPLAY_HEIGHT],
             stack: [0; STACK_DEPTH],
             sp: 0,
+            rng: Rng::new(seed),
         }
     }
 
@@ -120,6 +132,7 @@ impl Chip8 {
             0xA => self.i = nnn,
             // COSMAC VIP quirk: the offset is always V0, not VX.
             0xB => self.pc = nnn + u16::from(self.v[0]),
+            0xC => self.v[x] = self.rng.next_u8() & nn,
             0xD => self.draw_sprite(x, y, n),
             _ => return Err(ExecError::UnknownOpcode(op)),
         }

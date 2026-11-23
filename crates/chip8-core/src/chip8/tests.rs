@@ -296,3 +296,29 @@ fn step_bnnn_jumps_with_v0_offset() {
     }
     assert_eq!(c.pc, 0x210);
 }
+
+#[test]
+fn step_cxnn_is_deterministic_per_seed() {
+    let run = |seed| {
+        let mut c = Chip8::with_seed(seed);
+        c.load_rom(&[0xC0, 0xFF, 0xC1, 0xFF, 0xC2, 0xFF]).unwrap();
+        for _ in 0..3 {
+            c.step().unwrap();
+        }
+        [c.v[0], c.v[1], c.v[2]]
+    };
+    assert_eq!(run(7), run(7));
+    assert_ne!(run(7), run(8));
+}
+
+#[test]
+fn step_cxnn_masks_with_nn() {
+    // 0x200: V0 = rand & 0x0F; 0x202: jump back to 0x200.
+    let mut c = Chip8::new();
+    c.load_rom(&[0xC0, 0x0F, 0x12, 0x00]).unwrap();
+    for _ in 0..100 {
+        c.step().unwrap();
+        assert!(c.v[0] <= 0x0F, "got {:#04X}", c.v[0]);
+        c.step().unwrap();
+    }
+}
