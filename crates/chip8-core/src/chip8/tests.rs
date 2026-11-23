@@ -2,6 +2,18 @@
 
 use super::*;
 
+/// Loads `rom` into a fresh machine and executes `steps` instructions.
+fn run(rom: &[u8], steps: usize) -> Chip8 {
+    let mut c = Chip8::new();
+    c.load_rom(rom).unwrap();
+    for _ in 0..steps {
+        c.step().unwrap();
+    }
+    c
+}
+
+// --- Machine setup ---
+
 #[test]
 fn new_starts_at_program_start() {
     assert_eq!(Chip8::new().pc, PROGRAM_START);
@@ -9,9 +21,7 @@ fn new_starts_at_program_start() {
 
 #[test]
 fn load_rom_copies_to_program_start() {
-    let mut c = Chip8::new();
-    c.load_rom(&[0xAB, 0xCD]).unwrap();
-    assert_eq!(c.memory[0x200..0x202], [0xAB, 0xCD]);
+    assert_eq!(run(&[0xAB, 0xCD], 0).memory[0x200..0x202], [0xAB, 0xCD]);
 }
 
 #[test]
@@ -22,94 +32,9 @@ fn load_rom_rejects_oversized_rom() {
 
 #[test]
 fn fetch_reads_big_endian_and_advances_pc() {
-    let mut c = Chip8::new();
-    c.load_rom(&[0x12, 0x34]).unwrap();
+    let mut c = run(&[0x12, 0x34], 0);
     assert_eq!(c.fetch(), 0x1234);
     assert_eq!(c.pc, PROGRAM_START + 2);
-}
-
-#[test]
-fn step_1nnn_jumps() {
-    let mut c = Chip8::new();
-    c.load_rom(&[0x1A, 0xBC]).unwrap();
-    c.step().unwrap();
-    assert_eq!(c.pc, 0xABC);
-}
-
-#[test]
-fn step_rejects_unknown_opcode() {
-    let mut c = Chip8::new();
-    c.load_rom(&[0xFF, 0xFF]).unwrap();
-    assert_eq!(c.step(), Err(ExecError::UnknownOpcode(0xFFFF)));
-}
-
-#[test]
-fn step_6xnn_sets_register() {
-    let mut c = Chip8::new();
-    c.load_rom(&[0x6A, 0x42]).unwrap();
-    c.step().unwrap();
-    assert_eq!(c.v[0xA], 0x42);
-}
-
-#[test]
-fn step_7xnn_adds_to_register() {
-    let mut c = Chip8::new();
-    c.load_rom(&[0x63, 0x10, 0x73, 0x05]).unwrap();
-    c.step().unwrap();
-    c.step().unwrap();
-    assert_eq!(c.v[3], 0x15);
-}
-
-#[test]
-fn step_7xnn_wraps_without_touching_vf() {
-    let mut c = Chip8::new();
-    c.load_rom(&[0x63, 0xFF, 0x73, 0x02]).unwrap();
-    c.step().unwrap();
-    c.step().unwrap();
-    assert_eq!(c.v[3], 0x01);
-    assert_eq!(c.v[0xF], 0);
-}
-
-#[test]
-fn step_annn_sets_index() {
-    let mut c = Chip8::new();
-    c.load_rom(&[0xA1, 0x23]).unwrap();
-    c.step().unwrap();
-    assert_eq!(c.i, 0x123);
-}
-
-#[test]
-fn step_00e0_clears_display() {
-    let mut c = Chip8::new();
-    c.display[0] = true;
-    c.load_rom(&[0x00, 0xE0]).unwrap();
-    c.step().unwrap();
-    assert!(c.display.iter().all(|&p| !p));
-}
-
-#[test]
-fn step_dxyn_draws_sprite() {
-    let mut c = Chip8::new();
-    // I = 0x204; draw 2 rows at (V0, V1) = (0, 0); sprite data.
-    c.load_rom(&[0xA2, 0x04, 0xD0, 0x12, 0xF0, 0x90]).unwrap();
-    c.step().unwrap();
-    c.step().unwrap();
-    let (on, off) = (true, false);
-    assert_eq!(c.display[0..8], [on, on, on, on, off, off, off, off]);
-    assert_eq!(c.display[64..72], [on, off, off, on, off, off, off, off]);
-    assert_eq!(c.v[0xF], 0);
-}
-
-#[test]
-fn step_dxyn_sets_vf_on_collision() {
-    let mut c = Chip8::new();
-    // I = 0x206; draw the same 1-row sprite twice; sprite data.
-    c.load_rom(&[0xA2, 0x06, 0xD0, 0x11, 0xD0, 0x11, 0x80]).unwrap();
-    for _ in 0..3 {
-        c.step().unwrap();
-    }
-    assert!(!c.display[0]);
-    assert_eq!(c.v[0xF], 1);
 }
 
 #[test]
@@ -120,10 +45,20 @@ fn display_exposes_full_framebuffer() {
 }
 
 #[test]
+fn step_rejects_unknown_opcode() {
+    assert_eq!(run(&[0xFF, 0xFF], 0).step(), Err(ExecError::UnknownOpcode(0xFFFF)));
+}
+
+// --- Flow control ---
+
+#[test]
+fn step_1nnn_jumps() {
+    assert_eq!(run(&[0x1A, 0xBC], 1).pc, 0xABC);
+}
+
+#[test]
 fn step_2nnn_pushes_return_address_and_jumps() {
-    let mut c = Chip8::new();
-    c.load_rom(&[0x23, 0x00]).unwrap();
-    c.step().unwrap();
+    let c = run(&[0x23, 0x00], 1);
     assert_eq!(c.pc, 0x300);
     assert_eq!(c.sp, 1);
     assert_eq!(c.stack[0], PROGRAM_START + 2);
@@ -131,42 +66,37 @@ fn step_2nnn_pushes_return_address_and_jumps() {
 
 #[test]
 fn step_2nnn_rejects_stack_overflow() {
-    let mut c = Chip8::new();
-    // Calls itself forever.
-    c.load_rom(&[0x22, 0x00]).unwrap();
-    for _ in 0..STACK_DEPTH {
-        c.step().unwrap();
-    }
+    // Calls itself; the call after STACK_DEPTH has no free slot.
+    let mut c = run(&[0x22, 0x00], STACK_DEPTH);
     assert_eq!(c.step(), Err(ExecError::StackOverflow));
 }
 
 #[test]
 fn step_00ee_returns_after_call() {
-    let mut c = Chip8::new();
     // 0x200: call 0x204; 0x202: (return lands here); 0x204: return.
-    c.load_rom(&[0x22, 0x04, 0x00, 0x00, 0x00, 0xEE]).unwrap();
-    c.step().unwrap();
-    c.step().unwrap();
+    let c = run(&[0x22, 0x04, 0x00, 0x00, 0x00, 0xEE], 2);
     assert_eq!(c.pc, PROGRAM_START + 2);
     assert_eq!(c.sp, 0);
 }
 
 #[test]
 fn step_00ee_rejects_stack_underflow() {
-    let mut c = Chip8::new();
-    c.load_rom(&[0x00, 0xEE]).unwrap();
-    assert_eq!(c.step(), Err(ExecError::StackUnderflow));
+    assert_eq!(run(&[0x00, 0xEE], 0).step(), Err(ExecError::StackUnderflow));
 }
+
+#[test]
+fn step_bnnn_jumps_with_v0_offset() {
+    // V0 = 0x10, V2 = 0x99, then B200: target is 0x200 + V0, not + V2.
+    assert_eq!(run(&[0x60, 0x10, 0x62, 0x99, 0xB2, 0x00], 3).pc, 0x210);
+}
+
+// --- Conditional skips ---
 
 #[test]
 fn step_3xnn_skips_if_equal() {
     // V0 = 0x05, then 3 0 NN.
     for (nn, expected_pc) in [(0x05, 0x206), (0x06, 0x204)] {
-        let mut c = Chip8::new();
-        c.load_rom(&[0x60, 0x05, 0x30, nn]).unwrap();
-        c.step().unwrap();
-        c.step().unwrap();
-        assert_eq!(c.pc, expected_pc, "nn = {nn:#04X}");
+        assert_eq!(run(&[0x60, 0x05, 0x30, nn], 2).pc, expected_pc, "nn = {nn:#04X}");
     }
 }
 
@@ -174,11 +104,7 @@ fn step_3xnn_skips_if_equal() {
 fn step_4xnn_skips_if_not_equal() {
     // V0 = 0x05, then 4 0 NN.
     for (nn, expected_pc) in [(0x05, 0x204), (0x06, 0x206)] {
-        let mut c = Chip8::new();
-        c.load_rom(&[0x60, 0x05, 0x40, nn]).unwrap();
-        c.step().unwrap();
-        c.step().unwrap();
-        assert_eq!(c.pc, expected_pc, "nn = {nn:#04X}");
+        assert_eq!(run(&[0x60, 0x05, 0x40, nn], 2).pc, expected_pc, "nn = {nn:#04X}");
     }
 }
 
@@ -186,11 +112,7 @@ fn step_4xnn_skips_if_not_equal() {
 fn step_5xy0_skips_if_registers_equal() {
     // V0 = 0x05, V1 = v1, then 5 0 1 0.
     for (v1, expected_pc) in [(0x05, 0x208), (0x06, 0x206)] {
-        let mut c = Chip8::new();
-        c.load_rom(&[0x60, 0x05, 0x61, v1, 0x50, 0x10]).unwrap();
-        for _ in 0..3 {
-            c.step().unwrap();
-        }
+        let c = run(&[0x60, 0x05, 0x61, v1, 0x50, 0x10], 3);
         assert_eq!(c.pc, expected_pc, "v1 = {v1:#04X}");
     }
 }
@@ -199,20 +121,33 @@ fn step_5xy0_skips_if_registers_equal() {
 fn step_9xy0_skips_if_registers_differ() {
     // V0 = 0x05, V1 = v1, then 9 0 1 0.
     for (v1, expected_pc) in [(0x05, 0x206), (0x06, 0x208)] {
-        let mut c = Chip8::new();
-        c.load_rom(&[0x60, 0x05, 0x61, v1, 0x90, 0x10]).unwrap();
-        for _ in 0..3 {
-            c.step().unwrap();
-        }
+        let c = run(&[0x60, 0x05, 0x61, v1, 0x90, 0x10], 3);
         assert_eq!(c.pc, expected_pc, "v1 = {v1:#04X}");
     }
 }
 
 #[test]
 fn step_rejects_register_skip_with_nonzero_low_nibble() {
-    let mut c = Chip8::new();
-    c.load_rom(&[0x50, 0x11]).unwrap();
-    assert_eq!(c.step(), Err(ExecError::UnknownOpcode(0x5011)));
+    assert_eq!(run(&[0x50, 0x11], 0).step(), Err(ExecError::UnknownOpcode(0x5011)));
+}
+
+// --- Registers and arithmetic ---
+
+#[test]
+fn step_6xnn_sets_register() {
+    assert_eq!(run(&[0x6A, 0x42], 1).v[0xA], 0x42);
+}
+
+#[test]
+fn step_7xnn_adds_to_register() {
+    assert_eq!(run(&[0x63, 0x10, 0x73, 0x05], 2).v[3], 0x15);
+}
+
+#[test]
+fn step_7xnn_wraps_without_touching_vf() {
+    let c = run(&[0x63, 0xFF, 0x73, 0x02], 2);
+    assert_eq!(c.v[3], 0x01);
+    assert_eq!(c.v[0xF], 0);
 }
 
 #[test]
@@ -224,12 +159,7 @@ fn step_8xy0_to_8xy3_copy_and_logic() {
         (0x2, 0b1000, 0), // AND
         (0x3, 0b0110, 0), // XOR
     ] {
-        let mut c = Chip8::new();
-        c.load_rom(&[0x60, 0x0C, 0x61, 0x0A, 0x6F, 0x01, 0x80, 0x10 | n])
-            .unwrap();
-        for _ in 0..4 {
-            c.step().unwrap();
-        }
+        let c = run(&[0x60, 0x0C, 0x61, 0x0A, 0x6F, 0x01, 0x80, 0x10 | n], 4);
         assert_eq!(c.v[0], expected_v0, "8XY{n:X}");
         assert_eq!(c.v[0xF], expected_vf, "8XY{n:X} VF");
     }
@@ -246,11 +176,7 @@ fn step_8xy4_8xy5_8xy7_arithmetic_with_flags() {
         (0x7, 0x10, 0x30, 0x20, 1), // VY - VX, no borrow
         (0x7, 0x30, 0x10, 0xE0, 0), // VY - VX, borrow
     ] {
-        let mut c = Chip8::new();
-        c.load_rom(&[0x60, v0, 0x61, v1, 0x80, 0x10 | n]).unwrap();
-        for _ in 0..3 {
-            c.step().unwrap();
-        }
+        let c = run(&[0x60, v0, 0x61, v1, 0x80, 0x10 | n], 3);
         assert_eq!(c.v[0], expected_v0, "8XY{n:X} {v0:#04X} {v1:#04X}");
         assert_eq!(c.v[0xF], expected_vf, "8XY{n:X} {v0:#04X} {v1:#04X} VF");
     }
@@ -259,12 +185,7 @@ fn step_8xy4_8xy5_8xy7_arithmetic_with_flags() {
 #[test]
 fn step_8xy4_flag_wins_when_target_is_vf() {
     // VF = 0x10, V1 = 0x20, then VF += V1: sum 0x30, but VF ends as carry 0.
-    let mut c = Chip8::new();
-    c.load_rom(&[0x6F, 0x10, 0x61, 0x20, 0x8F, 0x14]).unwrap();
-    for _ in 0..3 {
-        c.step().unwrap();
-    }
-    assert_eq!(c.v[0xF], 0);
+    assert_eq!(run(&[0x6F, 0x10, 0x61, 0x20, 0x8F, 0x14], 3).v[0xF], 0);
 }
 
 #[test]
@@ -276,30 +197,15 @@ fn step_8xy6_8xye_shift_vy_into_vx() {
         (0xE, 0x81, 0x02, 1), // left, high bit out
         (0xE, 0x42, 0x84, 0),
     ] {
-        let mut c = Chip8::new();
-        c.load_rom(&[0x60, 0xFF, 0x61, v1, 0x80, 0x10 | n]).unwrap();
-        for _ in 0..3 {
-            c.step().unwrap();
-        }
+        let c = run(&[0x60, 0xFF, 0x61, v1, 0x80, 0x10 | n], 3);
         assert_eq!(c.v[0], expected_v0, "8XY{n:X} {v1:#04X}");
         assert_eq!(c.v[0xF], expected_vf, "8XY{n:X} {v1:#04X} VF");
     }
 }
 
 #[test]
-fn step_bnnn_jumps_with_v0_offset() {
-    // V0 = 0x10, V2 = 0x99, then B200: target is 0x200 + V0, not + V2.
-    let mut c = Chip8::new();
-    c.load_rom(&[0x60, 0x10, 0x62, 0x99, 0xB2, 0x00]).unwrap();
-    for _ in 0..3 {
-        c.step().unwrap();
-    }
-    assert_eq!(c.pc, 0x210);
-}
-
-#[test]
 fn step_cxnn_is_deterministic_per_seed() {
-    let run = |seed| {
+    let rolls = |seed| {
         let mut c = Chip8::with_seed(seed);
         c.load_rom(&[0xC0, 0xFF, 0xC1, 0xFF, 0xC2, 0xFF]).unwrap();
         for _ in 0..3 {
@@ -307,15 +213,14 @@ fn step_cxnn_is_deterministic_per_seed() {
         }
         [c.v[0], c.v[1], c.v[2]]
     };
-    assert_eq!(run(7), run(7));
-    assert_ne!(run(7), run(8));
+    assert_eq!(rolls(7), rolls(7));
+    assert_ne!(rolls(7), rolls(8));
 }
 
 #[test]
 fn step_cxnn_masks_with_nn() {
     // 0x200: V0 = rand & 0x0F; 0x202: jump back to 0x200.
-    let mut c = Chip8::new();
-    c.load_rom(&[0xC0, 0x0F, 0x12, 0x00]).unwrap();
+    let mut c = run(&[0xC0, 0x0F, 0x12, 0x00], 0);
     for _ in 0..100 {
         c.step().unwrap();
         assert!(c.v[0] <= 0x0F, "got {:#04X}", c.v[0]);
@@ -323,24 +228,50 @@ fn step_cxnn_masks_with_nn() {
     }
 }
 
+// --- Index register and memory ---
+
+#[test]
+fn step_annn_sets_index() {
+    assert_eq!(run(&[0xA1, 0x23], 1).i, 0x123);
+}
+
 #[test]
 fn step_fx1e_adds_vx_to_index() {
     // I = 0x100, V0 = 0x20, then F01E.
-    let mut c = Chip8::new();
-    c.load_rom(&[0xA1, 0x00, 0x60, 0x20, 0xF0, 0x1E]).unwrap();
-    for _ in 0..3 {
-        c.step().unwrap();
-    }
-    assert_eq!(c.i, 0x120);
+    assert_eq!(run(&[0xA1, 0x00, 0x60, 0x20, 0xF0, 0x1E], 3).i, 0x120);
 }
 
 #[test]
 fn step_fx33_stores_decimal_digits() {
     // I = 0x300, V0 = 157, then F033.
-    let mut c = Chip8::new();
-    c.load_rom(&[0xA3, 0x00, 0x60, 157, 0xF0, 0x33]).unwrap();
-    for _ in 0..3 {
-        c.step().unwrap();
-    }
+    let c = run(&[0xA3, 0x00, 0x60, 157, 0xF0, 0x33], 3);
     assert_eq!(c.memory[0x300..0x303], [1, 5, 7]);
+}
+
+// --- Display ---
+
+#[test]
+fn step_00e0_clears_display() {
+    let mut c = run(&[0x00, 0xE0], 0);
+    c.display[0] = true;
+    c.step().unwrap();
+    assert!(c.display.iter().all(|&p| !p));
+}
+
+#[test]
+fn step_dxyn_draws_sprite() {
+    // I = 0x204; draw 2 rows at (V0, V1) = (0, 0); sprite data.
+    let c = run(&[0xA2, 0x04, 0xD0, 0x12, 0xF0, 0x90], 2);
+    let (on, off) = (true, false);
+    assert_eq!(c.display[0..8], [on, on, on, on, off, off, off, off]);
+    assert_eq!(c.display[64..72], [on, off, off, on, off, off, off, off]);
+    assert_eq!(c.v[0xF], 0);
+}
+
+#[test]
+fn step_dxyn_sets_vf_on_collision() {
+    // I = 0x206; draw the same 1-row sprite twice; sprite data.
+    let c = run(&[0xA2, 0x06, 0xD0, 0x11, 0xD0, 0x11, 0x80], 3);
+    assert!(!c.display[0]);
+    assert_eq!(c.v[0xF], 1);
 }
