@@ -15,6 +15,16 @@ const PIXEL_OFF: u32 = 0x0000_0000;
 /// ~700 instructions/s at 60 fps, the conventional CHIP-8 speed.
 const INSTRUCTIONS_PER_FRAME: usize = 12;
 
+/// Conventional layout: the left 4x4 block of a QWERTY keyboard
+/// mirrors the COSMAC VIP hex keypad.
+#[rustfmt::skip]
+const KEYMAP: [(Key, u8); 16] = [
+    (Key::Key1, 0x1), (Key::Key2, 0x2), (Key::Key3, 0x3), (Key::Key4, 0xC),
+    (Key::Q,    0x4), (Key::W,    0x5), (Key::E,    0x6), (Key::R,    0xD),
+    (Key::A,    0x7), (Key::S,    0x8), (Key::D,    0x9), (Key::F,    0xE),
+    (Key::Z,    0xA), (Key::X,    0x0), (Key::C,    0xB), (Key::V,    0xF),
+];
+
 fn main() -> ExitCode {
     let mut args = env::args().skip(1);
     let Some(path) = args.next() else {
@@ -67,6 +77,9 @@ fn main() -> ExitCode {
 
     let mut buffer = vec![PIXEL_OFF; DISPLAY_WIDTH * DISPLAY_HEIGHT];
     while window.is_open() && !window.is_key_down(Key::Escape) {
+        for &(key, chip8_key) in &KEYMAP {
+            chip8.set_key(chip8_key, window.is_key_down(key));
+        }
         for _ in 0..INSTRUCTIONS_PER_FRAME {
             if let Err(e) = chip8.step() {
                 eprintln!("{e}");
