@@ -28,12 +28,11 @@ from chip8_rl.display import (
     draw_line_chart,
     draw_q_values,
 )
-from chip8_rl.dqn import select_action
+from chip8_rl.dqn import EVAL_EPSILON, select_action
 from chip8_rl.envs import make_pong_env
 from chip8_rl.metrics import MetricsReader
 from chip8_rl.train import CHECKPOINT_NAME, METRICS_NAME, load_checkpoint
 
-EPSILON = 0.02  # A little randomness, so an untrained net can't freeze forever.
 FPS = 15  # Decisions per second: real game speed with frame skip 4.
 METRICS_POLL_SECONDS = 2.0
 AVERAGE_WINDOW = 20  # Matches the trainer's avg20.
@@ -151,7 +150,7 @@ def view(run_dir: Path) -> None:
             if quit_requested():
                 return
             poll_metrics()
-            action, q_values = select_action(net, obs, EPSILON, rng)
+            action, q_values = select_action(net, obs, EVAL_EPSILON, rng)
             obs, _, terminated, truncated, info = env.step(action)
             done = terminated or truncated
             score = f"{info['agent_score']} - {info['opponent_score']}"

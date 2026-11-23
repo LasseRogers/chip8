@@ -9,6 +9,9 @@ from torch import nn
 
 from chip8_rl.envs import STACK_SIZE
 
+# Evaluation keeps a little randomness, so an untrained net can't freeze forever.
+EVAL_EPSILON = 0.02
+
 
 class QNetwork(nn.Module):
     """Maps stacked CHIP-8 screens to one Q-value per action.

@@ -14,9 +14,11 @@ import torch
 from chip8_rl.device import best_device
 from chip8_rl.dqn import QNetwork, ReplayBuffer, dqn_update, linear_epsilon, select_action
 from chip8_rl.envs import make_pong_env
+from chip8_rl.video import record_clip
 
 CHECKPOINT_NAME = "latest.pt"
 METRICS_NAME = "metrics.jsonl"
+VIDEOS_DIR = "videos"
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,7 @@ class Config:
     epsilon_end: float = 0.05
     epsilon_decay_steps: int = 100_000
     checkpoint_every: int = 10_000
+    video_every: int = 50_000  # Each clip uses the same seed, so clips compare fairly.
     seed: int = 0
 
 
@@ -106,6 +109,11 @@ def train(cfg: Config, run_dir: Path) -> None:
                 steps_done = step + 1
                 if steps_done % cfg.checkpoint_every == 0:
                     save_checkpoint(checkpoint, online, cfg, steps_done)
+                if steps_done % cfg.video_every == 0:
+                    clip = run_dir / VIDEOS_DIR / f"step-{steps_done:07d}.mp4"
+                    result = record_clip(online, clip, seed=cfg.seed)
+                    score = f"{result['agent_score']}-{result['opponent_score']}"
+                    print(f"recorded {clip} (score {score} after 60 s max)", flush=True)
 
                 if terminated or truncated:
                     episode += 1
