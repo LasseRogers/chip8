@@ -1,6 +1,7 @@
 //! CHIP-8 machine state.
 
 use std::fmt;
+use std::ops::Range;
 
 use crate::rng::Rng;
 
@@ -54,6 +55,8 @@ pub enum ExecError {
     StackOverflow,
     /// `00EE` with an empty stack.
     StackUnderflow,
+    /// A memory access reached past the end of the 4 KiB address space.
+    AddressOutOfRange(usize),
 }
 
 impl fmt::Display for ExecError {
@@ -62,6 +65,7 @@ impl fmt::Display for ExecError {
             Self::UnknownOpcode(op) => write!(f, "unknown opcode {op:#06X}"),
             Self::StackOverflow => f.write_str("stack overflow"),
             Self::StackUnderflow => f.write_str("stack underflow"),
+            Self::AddressOutOfRange(addr) => write!(f, "address out of range: {addr:#05X}"),
         }
     }
 }
@@ -174,16 +178,16 @@ impl Chip8 {
     }
 
     /// Reads the big-endian opcode at `pc` and advances past it.
-    fn fetch(&mut self) -> u16 {
-        let pc = self.pc as usize;
-        let op = u16::from_be_bytes([self.memory[pc], self.memory[pc + 1]]);
+    fn fetch(&mut self) -> Result<u16, ExecError> {
+        let bytes = &self.memory[mem_range(usize::from(self.pc), 2)?];
+        let op = u16::from_be_bytes([bytes[0], bytes[1]]);
         self.pc += 2;
-        op
+        Ok(op)
     }
 
     /// Executes a single instruction.
     pub fn step(&mut self) -> Result<(), ExecError> {
-        let op = self.fetch();
+        let op = self.fetch()?;
         let x = usize::from((op >> 8) & 0xF);
         let y = usize::from((op >> 4) & 0xF);
         let n = usize::from(op & 0xF);
@@ -272,24 +276,25 @@ impl Chip8 {
             0x0A => self.wait_for_key(x),
             0x15 => self.delay_timer = self.v[x],
             0x18 => self.sound_timer = self.v[x],
-            0x1E => self.i += u16::from(self.v[x]),
+            // Wraps like the 16-bit hardware register instead of panicking.
+            0x1E => self.i = self.i.wrapping_add(u16::from(self.v[x])),
             // Only the low nibble of VX selects a glyph.
             0x29 => self.i = (FONT_START + usize::from(self.v[x] & 0xF) * FONT_GLYPH_SIZE) as u16,
             // Hundreds, tens and ones digits of VX at I, I+1, I+2.
             0x33 => {
                 let vx = self.v[x];
                 let i = usize::from(self.i);
-                self.memory[i..i + 3].copy_from_slice(&[vx / 100, vx / 10 % 10, vx % 10]);
+                self.memory[mem_range(i, 3)?].copy_from_slice(&[vx / 100, vx / 10 % 10, vx % 10]);
             }
             // COSMAC VIP quirk: I advances past the copied bytes.
             0x55 => {
                 let i = usize::from(self.i);
-                self.memory[i..=i + x].copy_from_slice(&self.v[..=x]);
+                self.memory[mem_range(i, x + 1)?].copy_from_slice(&self.v[..=x]);
                 self.i += x as u16 + 1;
             }
             0x65 => {
                 let i = usize::from(self.i);
-                self.v[..=x].copy_from_slice(&self.memory[i..=i + x]);
+                self.v[..=x].copy_from_slice(&self.memory[mem_range(i, x + 1)?]);
                 self.i += x as u16 + 1;
             }
             _ => return Err(ExecError::UnknownOpcode(op)),
@@ -374,6 +379,15 @@ impl Chip8 {
             }
         }
     }
+}
+
+/// The memory range `addr..addr + len`, if it lies within the address space.
+fn mem_range(addr: usize, len: usize) -> Result<Range<usize>, ExecError> {
+    let end = addr + len;
+    if end > MEMORY_SIZE {
+        return Err(ExecError::AddressOutOfRange(addr));
+    }
+    Ok(addr..end)
 }
 
 impl Default for Chip8 {

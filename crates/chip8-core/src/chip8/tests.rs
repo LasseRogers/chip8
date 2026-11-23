@@ -33,7 +33,7 @@ fn load_rom_rejects_oversized_rom() {
 #[test]
 fn fetch_reads_big_endian_and_advances_pc() {
     let mut c = run(&[0x12, 0x34], 0);
-    assert_eq!(c.fetch(), 0x1234);
+    assert_eq!(c.fetch(), Ok(0x1234));
     assert_eq!(c.pc, PROGRAM_START + 2);
 }
 
@@ -411,4 +411,36 @@ fn run_frame_executes_instructions_then_ticks() {
     c.run_frame(3).unwrap();
     assert_eq!(c.pc, 0x204);
     assert_eq!(c.delay_timer, 4);
+}
+
+// --- Out-of-range memory access ---
+
+#[test]
+fn step_rejects_fetch_past_end_of_memory() {
+    // Jump to 0xFFF, where only one byte of an opcode fits.
+    let mut c = run(&[0x1F, 0xFF], 1);
+    assert_eq!(c.step(), Err(ExecError::AddressOutOfRange(0xFFF)));
+}
+
+#[test]
+fn step_rejects_memory_ops_past_end_of_memory() {
+    // I = 0xFFE, then an op needing 3 bytes: F033, F255, F265.
+    for op in [[0xF0, 0x33], [0xF2, 0x55], [0xF2, 0x65]] {
+        let mut c = run(&[0xAF, 0xFE, op[0], op[1]], 1);
+        assert_eq!(
+            c.step(),
+            Err(ExecError::AddressOutOfRange(0xFFE)),
+            "{op:02X?}"
+        );
+    }
+}
+
+#[test]
+fn step_fx1e_wraps_index_instead_of_overflowing() {
+    // I = 0xFFF, V0 = 0xFF, then loop F01E; 300 adds overflow 16 bits.
+    let c = run(
+        &[0xAF, 0xFF, 0x60, 0xFF, 0xF0, 0x1E, 0x12, 0x04],
+        2 + 2 * 300,
+    );
+    assert_eq!(u32::from(c.i), (0xFFF + 300 * 0xFF) % 0x1_0000);
 }
