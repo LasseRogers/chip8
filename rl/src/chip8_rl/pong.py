@@ -3,7 +3,6 @@
 The agent controls the left paddle against the ROM's built-in opponent.
 """
 
-import os
 from pathlib import Path
 
 import chip8
@@ -35,7 +34,12 @@ class PongEnv(gym.Env):
         self.render_mode = render_mode
         self._window = None
         self._clock = None
-        self._rom = Path(rom_path).read_bytes()
+        rom_path = Path(rom_path)
+        if not rom_path.is_file():
+            raise FileNotFoundError(
+                f"ROM not found: {rom_path}. Download pong1p.ch8 into the repo's roms/ folder."
+            )
+        self._rom = rom_path.read_bytes()
         self._chip8: chip8.Chip8 | None = None
         self.action_space = spaces.Discrete(len(self.ACTION_KEYS))
         self.observation_space = spaces.Box(0, 1, SCREEN_SHAPE, dtype=np.uint8)
@@ -47,7 +51,7 @@ class PongEnv(gym.Env):
         self._chip8.load_rom(self._rom)
         if self.render_mode == "human":
             self._draw_window()
-        return self._observation(), self._info()
+        return self._observation(), self._info(*self._scores())
 
     def step(self, action: int):
         key = self.ACTION_KEYS[action]
@@ -65,7 +69,7 @@ class PongEnv(gym.Env):
         terminated = WIN_SCORE in (agent, opponent)
         if self.render_mode == "human":
             self._draw_window()
-        return self._observation(), reward, terminated, False, self._info()
+        return self._observation(), reward, terminated, False, self._info(agent, opponent)
 
     def render(self) -> np.ndarray | None:
         if self.render_mode == "rgb_array":
@@ -83,8 +87,10 @@ class PongEnv(gym.Env):
 
     def _draw_window(self) -> None:
         """Shows the current frame and paces the loop to real time."""
-        os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
-        import pygame  # Imported lazily: only human mode needs a display.
+        # Imported lazily: only human mode needs a display.
+        import pygame
+
+        from chip8_rl.display import blit_frame
 
         if self._window is None:
             pygame.display.init()  # Display only; full init also opens audio.
@@ -96,8 +102,7 @@ class PongEnv(gym.Env):
         if any(event.type == pygame.QUIT for event in pygame.event.get()):
             self.close()
             raise KeyboardInterrupt("window closed")
-        # pygame indexes surfaces as (x, y); numpy frames are (y, x).
-        self._window.blit(pygame.surfarray.make_surface(self._frame().swapaxes(0, 1)), (0, 0))
+        blit_frame(self._window, self._frame())
         pygame.display.flip()
         self._clock.tick(self.metadata["render_fps"])
 
@@ -110,8 +115,8 @@ class PongEnv(gym.Env):
         agent, opponent = self._chip8.read_memory(SCORE_ADDR, 2)
         return agent, opponent
 
-    def _info(self) -> dict:
-        agent, opponent = self._scores()
+    @staticmethod
+    def _info(agent: int, opponent: int) -> dict:
         return {"agent_score": agent, "opponent_score": opponent}
 
     def _observation(self) -> np.ndarray:

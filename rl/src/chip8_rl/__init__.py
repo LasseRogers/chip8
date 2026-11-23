@@ -1,5 +1,10 @@
 """Gymnasium environments backed by the chip8 emulator."""
 
+import os
+
+# Set before any module imports pygame: silences its startup banner.
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+
 from gymnasium.envs.registration import register
 
 from chip8_rl.pong import PongEnv

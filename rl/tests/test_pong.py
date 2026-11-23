@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from gymnasium.utils.env_checker import check_env
 
-from chip8_rl import PONG_ID
+from chip8_rl import PONG_ID, PongEnv
 from chip8_rl.pong import RENDER_SCALE, WIN_SCORE
 
 
@@ -75,3 +75,8 @@ def test_closing_human_window_interrupts():
     pygame.event.post(pygame.event.Event(pygame.QUIT))
     with pytest.raises(KeyboardInterrupt):
         env.step(0)
+
+
+def test_missing_rom_raises_clear_error(tmp_path):
+    with pytest.raises(FileNotFoundError, match="ROM not found"):
+        PongEnv(rom_path=tmp_path / "missing.ch8")

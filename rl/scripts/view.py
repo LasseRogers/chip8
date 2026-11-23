@@ -17,6 +17,7 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import pygame
 
 from chip8_rl.device import best_device
+from chip8_rl.display import blit_frame
 from chip8_rl.dqn import select_action
 from chip8_rl.envs import make_pong_env
 from chip8_rl.train import CHECKPOINT_NAME, load_checkpoint
@@ -36,8 +37,7 @@ def draw(
 ) -> None:
     window.fill((0, 0, 0))
     if frame is not None:
-        # pygame indexes surfaces as (x, y); numpy frames are (y, x).
-        window.blit(pygame.surfarray.make_surface(frame.swapaxes(0, 1)), (0, 0))
+        blit_frame(window, frame)
     window.blit(font.render(text, True, TEXT_COLOR), (8, window.get_height() - STATUS_HEIGHT + 6))
     pygame.display.flip()
 
@@ -48,7 +48,7 @@ def view(run_dir: Path) -> None:
     rng = np.random.default_rng()
     env = make_pong_env(render_mode="rgb_array")
     env.reset()
-    width, height = env.render().shape[1], env.render().shape[0]
+    height, width, _ = env.render().shape
 
     pygame.display.init()
     pygame.font.init()
