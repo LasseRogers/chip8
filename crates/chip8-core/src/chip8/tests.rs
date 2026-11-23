@@ -327,3 +327,21 @@ fn tick_timers_counts_down_and_stops_at_zero() {
     assert_eq!((c.delay_timer, c.sound_timer), (0, 0));
     assert!(!c.sound_active());
 }
+
+// --- Keypad ---
+
+#[test]
+fn step_ex9e_exa1_skip_on_key_state() {
+    // V0 = 0x5, then E09E or E0A1 on key V0.
+    for (nn, pressed, expected_pc) in [
+        (0x9E, true, 0x206),
+        (0x9E, false, 0x204),
+        (0xA1, true, 0x204),
+        (0xA1, false, 0x206),
+    ] {
+        let mut c = run(&[0x60, 0x05, 0xE0, nn], 1);
+        c.set_key(0x5, pressed);
+        c.step().unwrap();
+        assert_eq!(c.pc, expected_pc, "E0{nn:02X} pressed = {pressed}");
+    }
+}

@@ -14,6 +14,7 @@ pub const DISPLAY_HEIGHT: usize = 32;
 
 const REGISTER_COUNT: usize = 16;
 const STACK_DEPTH: usize = 16;
+const KEY_COUNT: usize = 16;
 /// Seed used by `new`; fixed so default runs are reproducible.
 const DEFAULT_SEED: u64 = 0;
 
@@ -86,6 +87,8 @@ pub struct Chip8 {
     delay_timer: u8,
     /// Counts down at 60 Hz; the buzzer sounds while non-zero.
     sound_timer: u8,
+    /// Hex keypad 0..F; `true` while held.
+    keys: [bool; KEY_COUNT],
 }
 
 impl Chip8 {
@@ -109,6 +112,7 @@ impl Chip8 {
             rng: Rng::new(seed),
             delay_timer: 0,
             sound_timer: 0,
+            keys: [false; KEY_COUNT],
         }
     }
 
@@ -136,6 +140,15 @@ impl Chip8 {
     /// Whether the buzzer should be sounding.
     pub fn sound_active(&self) -> bool {
         self.sound_timer > 0
+    }
+
+    /// Presses or releases hex key `key`.
+    ///
+    /// # Panics
+    ///
+    /// If `key` is greater than `0xF`.
+    pub fn set_key(&mut self, key: u8, pressed: bool) {
+        self.keys[usize::from(key)] = pressed;
     }
 
     /// Reads the big-endian opcode at `pc` and advances past it.
@@ -176,6 +189,9 @@ impl Chip8 {
             0xB => self.pc = nnn + u16::from(self.v[0]),
             0xC => self.v[x] = self.rng.next_u8() & nn,
             0xD => self.draw_sprite(x, y, n),
+            // Only the low nibble of VX selects a key.
+            0xE if nn == 0x9E => self.skip_if(self.keys[usize::from(self.v[x] & 0xF)]),
+            0xE if nn == 0xA1 => self.skip_if(!self.keys[usize::from(self.v[x] & 0xF)]),
             0xF => self.misc(op, x, nn)?,
             _ => return Err(ExecError::UnknownOpcode(op)),
         }
