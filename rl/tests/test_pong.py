@@ -1,19 +1,20 @@
 """Tests for PongEnv."""
 
+import gymnasium as gym
 import numpy as np
 import pytest
 from gymnasium.utils.env_checker import check_env
 
-from chip8_rl import PongEnv
+from chip8_rl import PONG_ID
 from chip8_rl.pong import RENDER_SCALE, WIN_SCORE
 
 
 @pytest.fixture
-def env() -> PongEnv:
-    return PongEnv()
+def env() -> gym.Env:
+    return gym.make(PONG_ID)
 
 
-def play(env: PongEnv, seed: int) -> list[tuple[float, dict]]:
+def play(env: gym.Env, seed: int) -> list[tuple[float, dict]]:
     """Plays one seeded random episode; returns (reward, info) per step."""
     env.reset(seed=seed)
     env.action_space.seed(seed)
@@ -26,7 +27,8 @@ def play(env: PongEnv, seed: int) -> list[tuple[float, dict]]:
 
 
 def test_passes_gymnasium_env_checker():
-    check_env(PongEnv(render_mode="rgb_array"))
+    # The checker wants the raw env; it reads the spec that make() attached.
+    check_env(gym.make(PONG_ID, render_mode="rgb_array").unwrapped)
 
 
 def test_same_seed_reproduces_episode(env):
@@ -42,7 +44,7 @@ def test_episode_ends_at_win_score_with_unit_rewards(env):
 
 
 def test_rgb_array_render_is_upscaled_screen():
-    env = PongEnv(render_mode="rgb_array")
+    env = gym.make(PONG_ID, render_mode="rgb_array")
     env.reset(seed=0)
     for _ in range(10):
         obs, *_ = env.step(0)
