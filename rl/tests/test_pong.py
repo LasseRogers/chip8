@@ -65,3 +65,13 @@ def test_human_render_runs_and_closes():
     for _ in range(3):
         env.step(0)
     env.close()
+
+
+def test_closing_human_window_interrupts():
+    import pygame
+
+    env = gym.make(PONG_ID, render_mode="human")
+    env.reset(seed=0)
+    pygame.event.post(pygame.event.Event(pygame.QUIT))
+    with pytest.raises(KeyboardInterrupt):
+        env.step(0)

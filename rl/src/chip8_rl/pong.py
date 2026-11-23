@@ -91,7 +91,11 @@ class PongEnv(gym.Env):
             self._window = pygame.display.set_mode((64 * RENDER_SCALE, 32 * RENDER_SCALE))
             pygame.display.set_caption("chip8/Pong-v0")
             self._clock = pygame.time.Clock()
-        pygame.event.pump()  # Keeps the window responsive.
+        # Draining events keeps the window responsive. Closing it stops the
+        # program, the same as Ctrl+C.
+        if any(event.type == pygame.QUIT for event in pygame.event.get()):
+            self.close()
+            raise KeyboardInterrupt("window closed")
         # pygame indexes surfaces as (x, y); numpy frames are (y, x).
         self._window.blit(pygame.surfarray.make_surface(self._frame().swapaxes(0, 1)), (0, 0))
         pygame.display.flip()
