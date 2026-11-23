@@ -5,7 +5,14 @@ import pytest
 import torch
 
 from chip8_rl.device import best_device
-from chip8_rl.dqn import QNetwork, ReplayBuffer, linear_epsilon, select_action
+from chip8_rl.dqn import (
+    QNetwork,
+    ReplayBuffer,
+    dqn_update,
+    linear_epsilon,
+    select_action,
+    td_targets,
+)
 from chip8_rl.envs import STACK_SIZE
 
 
@@ -94,3 +101,29 @@ def test_full_exploration_covers_all_actions():
     net = FixedQ([0.1, 0.9, -0.5])
     actions = {select_action(net, random_obs(rng), epsilon=1.0, rng=rng)[0] for _ in range(100)}
     assert actions == {0, 1, 2}
+
+
+def test_td_targets_masks_future_after_termination():
+    targets = td_targets(
+        rewards=torch.tensor([1.0, 0.0, -1.0]),
+        next_q_max=torch.tensor([2.0, 2.0, 2.0]),
+        dones=torch.tensor([False, False, True]),
+        gamma=0.5,
+    )
+    assert targets.tolist() == pytest.approx([2.0, 1.0, -1.0])
+
+
+def test_dqn_update_reduces_loss_on_fixed_batch():
+    torch.manual_seed(0)
+    rng = np.random.default_rng(0)
+    buffer = ReplayBuffer(capacity=32, obs_shape=OBS_SHAPE)
+    for i in range(32):
+        buffer.add(random_obs(rng), i % 3, float(i % 3 - 1), random_obs(rng), True)
+    batch = buffer.sample(32, rng)
+
+    online, target = QNetwork(n_actions=3), QNetwork(n_actions=3)
+    optimizer = torch.optim.Adam(online.parameters(), lr=1e-3)
+    first = dqn_update(online, target, optimizer, batch, gamma=0.99)
+    for _ in range(50):
+        last = dqn_update(online, target, optimizer, batch, gamma=0.99)
+    assert last < first / 10

@@ -119,3 +119,35 @@ def select_action(
     if rng.random() < epsilon:
         return int(rng.integers(len(q_values))), q_values
     return int(q_values.argmax()), q_values
+
+
+def td_targets(
+    rewards: torch.Tensor, next_q_max: torch.Tensor, dones: torch.Tensor, gamma: float
+) -> torch.Tensor:
+    """Bellman targets: reward plus discounted best next value; no future after termination."""
+    return rewards + gamma * next_q_max * (1.0 - dones.float())
+
+
+def dqn_update(
+    online: nn.Module,
+    target: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    batch: Batch,
+    gamma: float,
+    max_grad_norm: float = 10.0,
+) -> float:
+    """One gradient step of `online` towards targets from the frozen `target`; returns the loss."""
+    device = next(online.parameters()).device
+    obs, actions, rewards, next_obs, dones = (torch.as_tensor(x, device=device) for x in batch)
+
+    with torch.no_grad():
+        targets = td_targets(rewards, target(next_obs).max(dim=1).values, dones, gamma)
+    predicted = online(obs).gather(1, actions.unsqueeze(1)).squeeze(1)
+    # Huber loss: quadratic near zero, linear for large errors, so outliers don't explode.
+    loss = nn.functional.smooth_l1_loss(predicted, targets)
+
+    optimizer.zero_grad()
+    loss.backward()
+    nn.utils.clip_grad_norm_(online.parameters(), max_grad_norm)
+    optimizer.step()
+    return loss.item()
