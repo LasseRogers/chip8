@@ -8,7 +8,7 @@ from chip8_rl.video import record_clip
 
 def test_record_clip_writes_playable_mp4(tmp_path):
     path = tmp_path / "clips" / "clip.mp4"
-    info = record_clip(QNetwork(n_actions=3), path, seed=0, max_steps=20)
+    info = record_clip(QNetwork(n_actions=3), "pong", path, seed=0, max_steps=20)
 
     assert {"agent_score", "opponent_score"} <= info.keys()
     reader = imageio.get_reader(path)

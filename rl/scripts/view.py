@@ -29,7 +29,7 @@ from chip8_rl.display import (
     draw_q_values,
 )
 from chip8_rl.dqn import EVAL_EPSILON, select_action
-from chip8_rl.envs import make_pong_env
+from chip8_rl.envs import make_env
 from chip8_rl.metrics import MetricsReader
 from chip8_rl.train import CHECKPOINT_NAME, METRICS_NAME, load_checkpoint
 
@@ -116,7 +116,7 @@ def view(run_dir: Path) -> None:
     metrics = MetricsReader(run_dir / METRICS_NAME)
     device = best_device()
     rng = np.random.default_rng()
-    env = make_pong_env(render_mode="rgb_array")
+    env = make_env("pong", render_mode="rgb_array")
     env.reset()
     height, width, _ = env.render().shape
     viewer = Viewer((width, height), env.unwrapped.action_names, f"chip8 viewer: {run_dir}")

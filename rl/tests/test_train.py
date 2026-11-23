@@ -27,3 +27,13 @@ def test_refuses_to_reuse_a_run_dir(tmp_path):
     (tmp_path / METRICS_NAME).write_text("")
     with pytest.raises(FileExistsError, match="already holds a run"):
         train(Config(total_steps=1), tmp_path)
+
+
+def test_trains_on_any_registered_game(tmp_path):
+    cfg = Config(game="invaders", total_steps=1_500, buffer_size=1_500, learning_starts=500)
+    train(cfg, tmp_path)
+
+    record = json.loads((tmp_path / METRICS_NAME).read_text().splitlines()[0])
+    assert "invaders_alive" in record["info"]
+    _, data = load_checkpoint(tmp_path / CHECKPOINT_NAME, torch.device("cpu"))
+    assert (data["config"]["game"], data["n_actions"]) == ("invaders", 6)

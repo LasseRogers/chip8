@@ -13,7 +13,7 @@ import torch
 
 from chip8_rl.device import best_device
 from chip8_rl.dqn import QNetwork, ReplayBuffer, dqn_update, linear_epsilon, select_action
-from chip8_rl.envs import make_pong_env
+from chip8_rl.envs import make_env
 from chip8_rl.video import record_clip
 
 CHECKPOINT_NAME = "latest.pt"
@@ -23,8 +23,9 @@ VIDEOS_DIR = "videos"
 
 @dataclass(frozen=True)
 class Config:
-    """DeepMind's Atari DQN settings, scaled down for CHIP-8 Pong."""
+    """DeepMind's Atari DQN settings, scaled down for CHIP-8 games."""
 
+    game: str = "pong"  # A name from chip8_rl.GAMES.
     total_steps: int = 500_000  # agent decisions; x4 frames with frame skip
     buffer_size: int = 100_000
     learning_starts: int = 10_000  # act randomly first to fill the buffer
@@ -66,7 +67,7 @@ def load_checkpoint(path: Path, device: torch.device) -> tuple[QNetwork, dict]:
 
 
 def train(cfg: Config, run_dir: Path) -> None:
-    """Trains on Pong, writing `latest.pt` and `metrics.jsonl` to `run_dir`."""
+    """Trains on `cfg.game`, writing `latest.pt` and `metrics.jsonl` to `run_dir`."""
     # Refuse to overwrite another run's checkpoint or mix its metrics.
     if (run_dir / CHECKPOINT_NAME).exists() or (run_dir / METRICS_NAME).exists():
         raise FileExistsError(f"{run_dir} already holds a run; choose a new --run-dir")
@@ -76,7 +77,7 @@ def train(cfg: Config, run_dir: Path) -> None:
     rng = np.random.default_rng(cfg.seed)
     torch.manual_seed(cfg.seed)
 
-    env = make_pong_env()
+    env = make_env(cfg.game)
     # Gymnasium's `n` is a NumPy integer; keep NumPy types out of the model.
     online = QNetwork(int(env.action_space.n)).to(device)
     target = copy.deepcopy(online)
@@ -111,9 +112,8 @@ def train(cfg: Config, run_dir: Path) -> None:
                     save_checkpoint(checkpoint, online, cfg, steps_done)
                 if steps_done % cfg.video_every == 0:
                     clip = run_dir / VIDEOS_DIR / f"step-{steps_done:07d}.mp4"
-                    result = record_clip(online, clip, seed=cfg.seed)
-                    score = f"{result['agent_score']}-{result['opponent_score']}"
-                    print(f"recorded {clip} (score {score} after 60 s max)", flush=True)
+                    result = record_clip(online, cfg.game, clip, seed=cfg.seed)
+                    print(f"recorded {clip} ({_describe(result)})", flush=True)
 
                 if terminated or truncated:
                     episode += 1
@@ -122,8 +122,7 @@ def train(cfg: Config, run_dir: Path) -> None:
                         "episode": episode,
                         "step": steps_done,
                         "epsilon": round(epsilon, 4),
-                        "agent_score": info["agent_score"],
-                        "opponent_score": info["opponent_score"],
+                        "info": info,
                         "reward": episode_reward,
                         "loss": float(np.mean(losses)) if losses else None,
                         "elapsed": round(time.perf_counter() - start, 1),
@@ -138,11 +137,15 @@ def train(cfg: Config, run_dir: Path) -> None:
             save_checkpoint(checkpoint, online, cfg, steps_done)
 
 
+def _describe(info: dict) -> str:
+    return " ".join(f"{key}={value}" for key, value in info.items())
+
+
 def _format(record: dict, avg_reward: float) -> str:
     loss = f"{record['loss']:.4f}" if record["loss"] is not None else "  -   "
     return (
         f"episode {record['episode']:>4}  step {record['step']:>7,}  eps {record['epsilon']:.2f}  "
-        f"score {record['agent_score']}-{record['opponent_score']}  "
+        f"{_describe(record['info'])}  "
         f"reward {record['reward']:+3.0f}  avg20 {avg_reward:+5.1f}  "
         f"loss {loss}  {record['step'] / record['elapsed']:,.0f} steps/s"
     )
