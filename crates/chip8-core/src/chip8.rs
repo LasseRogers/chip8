@@ -134,6 +134,7 @@ impl Chip8 {
             0xB => self.pc = nnn + u16::from(self.v[0]),
             0xC => self.v[x] = self.rng.next_u8() & nn,
             0xD => self.draw_sprite(x, y, n),
+            0xF => self.misc(op, x, nn)?,
             _ => return Err(ExecError::UnknownOpcode(op)),
         }
         Ok(())
@@ -172,6 +173,16 @@ impl Chip8 {
                 self.set_with_flag(x, diff, !borrow);
             }
             0xE => self.set_with_flag(x, vy << 1, vy & 0x80 != 0),
+            _ => return Err(ExecError::UnknownOpcode(op)),
+        }
+        Ok(())
+    }
+
+    /// Executes the `FXNN` family: timers, keypad, memory and font ops.
+    fn misc(&mut self, op: u16, x: usize, nn: u8) -> Result<(), ExecError> {
+        match nn {
+            // VF is not affected (COSMAC VIP behaviour).
+            0x1E => self.i += u16::from(self.v[x]),
             _ => return Err(ExecError::UnknownOpcode(op)),
         }
         Ok(())

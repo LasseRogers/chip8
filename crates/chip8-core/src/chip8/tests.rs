@@ -322,3 +322,14 @@ fn step_cxnn_masks_with_nn() {
         c.step().unwrap();
     }
 }
+
+#[test]
+fn step_fx1e_adds_vx_to_index() {
+    // I = 0x100, V0 = 0x20, then F01E.
+    let mut c = Chip8::new();
+    c.load_rom(&[0xA1, 0x00, 0x60, 0x20, 0xF0, 0x1E]).unwrap();
+    for _ in 0..3 {
+        c.step().unwrap();
+    }
+    assert_eq!(c.i, 0x120);
+}
