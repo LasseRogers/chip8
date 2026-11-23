@@ -89,6 +89,8 @@ pub struct Chip8 {
     sound_timer: u8,
     /// Hex keypad 0..F; `true` while held.
     keys: [bool; KEY_COUNT],
+    /// Key pressed during an `FX0A` wait; the wait ends when it is released.
+    held_key: Option<u8>,
 }
 
 impl Chip8 {
@@ -113,6 +115,7 @@ impl Chip8 {
             delay_timer: 0,
             sound_timer: 0,
             keys: [false; KEY_COUNT],
+            held_key: None,
         }
     }
 
@@ -241,6 +244,7 @@ impl Chip8 {
         match nn {
             // VF is not affected (COSMAC VIP behaviour).
             0x07 => self.v[x] = self.delay_timer,
+            0x0A => self.wait_for_key(x),
             0x15 => self.delay_timer = self.v[x],
             0x18 => self.sound_timer = self.v[x],
             0x1E => self.i += u16::from(self.v[x]),
@@ -266,6 +270,21 @@ impl Chip8 {
             _ => return Err(ExecError::UnknownOpcode(op)),
         }
         Ok(())
+    }
+
+    /// Blocks until a key is pressed and released, then stores it in Vx.
+    /// Blocking rewinds `pc`, so timers and the frontend keep running.
+    fn wait_for_key(&mut self, x: usize) {
+        match self.held_key {
+            Some(key) if !self.keys[usize::from(key)] => {
+                self.v[x] = key;
+                self.held_key = None;
+                return;
+            }
+            Some(_) => {}
+            None => self.held_key = self.keys.iter().position(|&k| k).map(|k| k as u8),
+        }
+        self.pc -= 2;
     }
 
     /// Writes `value` to Vx, then `flag` to VF, so the flag wins when x is F.

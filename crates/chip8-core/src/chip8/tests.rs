@@ -345,3 +345,20 @@ fn step_ex9e_exa1_skip_on_key_state() {
         assert_eq!(c.pc, expected_pc, "E0{nn:02X} pressed = {pressed}");
     }
 }
+
+#[test]
+fn step_fx0a_blocks_without_key() {
+    assert_eq!(run(&[0xF0, 0x0A], 3).pc, PROGRAM_START);
+}
+
+#[test]
+fn step_fx0a_stores_key_on_release() {
+    let mut c = run(&[0xF0, 0x0A], 1);
+    c.set_key(0x7, true);
+    c.step().unwrap();
+    assert_eq!(c.pc, PROGRAM_START, "still blocked while held");
+    c.set_key(0x7, false);
+    c.step().unwrap();
+    assert_eq!(c.v[0], 0x7);
+    assert_eq!(c.pc, PROGRAM_START + 2);
+}
