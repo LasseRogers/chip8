@@ -27,6 +27,7 @@ class PongEnv(gym.Env):
 
     # Action index -> CHIP-8 key held during the step; None holds nothing.
     ACTION_KEYS = (None, 0x1, 0x4)  # noop, up, down
+    ACTION_NAMES = ("nothing", "up", "down")
 
     def __init__(self, render_mode: str | None = None, rom_path: Path = ROM_PATH) -> None:
         if render_mode not in (None, *self.metadata["render_modes"]):
