@@ -64,6 +64,9 @@ def load_checkpoint(path: Path, device: torch.device) -> tuple[QNetwork, dict]:
 
 def train(cfg: Config, run_dir: Path) -> None:
     """Trains on Pong, writing `latest.pt` and `metrics.jsonl` to `run_dir`."""
+    # Refuse to overwrite another run's checkpoint or mix its metrics.
+    if (run_dir / CHECKPOINT_NAME).exists() or (run_dir / METRICS_NAME).exists():
+        raise FileExistsError(f"{run_dir} already holds a run; choose a new --run-dir")
     run_dir.mkdir(parents=True, exist_ok=True)
     device = best_device()
     print(f"training on {device} for {cfg.total_steps:,} steps (seed {cfg.seed}) -> {run_dir}")

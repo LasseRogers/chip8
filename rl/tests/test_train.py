@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 import torch
 
 from chip8_rl.train import CHECKPOINT_NAME, METRICS_NAME, Config, load_checkpoint, train
@@ -20,3 +21,9 @@ def test_short_run_writes_metrics_and_loadable_checkpoint(tmp_path):
     assert data["step"] == 3_000
     assert data["config"]["total_steps"] == 3_000
     assert net(torch.zeros((1, 4, 32, 64), dtype=torch.uint8)).shape == (1, 3)
+
+
+def test_refuses_to_reuse_a_run_dir(tmp_path):
+    (tmp_path / METRICS_NAME).write_text("")
+    with pytest.raises(FileExistsError, match="already holds a run"):
+        train(Config(total_steps=1), tmp_path)

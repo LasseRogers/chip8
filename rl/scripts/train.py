@@ -22,6 +22,8 @@ def main() -> None:
         train(Config(total_steps=args.steps, seed=args.seed), args.run_dir)
     except KeyboardInterrupt:
         print("stopped; checkpoint saved")
+    except FileExistsError as e:
+        raise SystemExit(f"error: {e}") from None
 
 
 if __name__ == "__main__":
