@@ -1,0 +1,13 @@
+[package]
+name = "chip8-py"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+# Python imports the module by this name.
+name = "chip8"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = "0.30"

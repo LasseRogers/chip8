@@ -1,3 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/chip8-core", "crates/chip8-desktop"]
+members = ["crates/chip8-core", "crates/chip8-desktop", "crates/chip8-py"]
+# chip8-py is built by maturin; plain `cargo build`/`cargo test` skip it
+# so they don't need a Python toolchain.
+default-members = ["crates/chip8-core", "crates/chip8-desktop"]
