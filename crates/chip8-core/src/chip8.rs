@@ -327,7 +327,10 @@ impl Chip8 {
 
     /// Pushes the return address and jumps to `addr`.
     fn call(&mut self, addr: u16) -> Result<(), ExecError> {
-        let slot = self.stack.get_mut(self.sp).ok_or(ExecError::StackOverflow)?;
+        let slot = self
+            .stack
+            .get_mut(self.sp)
+            .ok_or(ExecError::StackOverflow)?;
         *slot = self.pc;
         self.sp += 1;
         self.pc = addr;

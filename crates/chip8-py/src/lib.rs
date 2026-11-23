@@ -19,9 +19,9 @@ impl PyChip8 {
 
     /// Copies `rom` into memory at 0x200. Raises `ValueError` if it doesn't fit.
     fn load_rom(&mut self, rom: &[u8]) -> PyResult<()> {
-        self.0
-            .load_rom(rom)
-            .map_err(|RomTooLarge(size)| PyValueError::new_err(format!("ROM too large: {size} bytes")))
+        self.0.load_rom(rom).map_err(|RomTooLarge(size)| {
+            PyValueError::new_err(format!("ROM too large: {size} bytes"))
+        })
     }
 
     /// Executes one instruction. Raises `RuntimeError` on an execution error.
@@ -37,7 +37,12 @@ impl PyChip8 {
     }
 
     /// `length` bytes of memory from `addr`. Raises `ValueError` if out of range.
-    fn read_memory<'py>(&self, py: Python<'py>, addr: usize, length: usize) -> PyResult<Bound<'py, PyBytes>> {
+    fn read_memory<'py>(
+        &self,
+        py: Python<'py>,
+        addr: usize,
+        length: usize,
+    ) -> PyResult<Bound<'py, PyBytes>> {
         let bytes = addr
             .checked_add(length)
             .and_then(|end| self.0.memory().get(addr..end))

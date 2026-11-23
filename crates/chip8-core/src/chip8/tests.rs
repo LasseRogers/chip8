@@ -46,7 +46,10 @@ fn display_exposes_full_framebuffer() {
 
 #[test]
 fn step_rejects_unknown_opcode() {
-    assert_eq!(run(&[0xFF, 0xFF], 0).step(), Err(ExecError::UnknownOpcode(0xFFFF)));
+    assert_eq!(
+        run(&[0xFF, 0xFF], 0).step(),
+        Err(ExecError::UnknownOpcode(0xFFFF))
+    );
 }
 
 #[test]
@@ -104,7 +107,11 @@ fn step_bnnn_jumps_with_v0_offset() {
 fn step_3xnn_skips_if_equal() {
     // V0 = 0x05, then 3 0 NN.
     for (nn, expected_pc) in [(0x05, 0x206), (0x06, 0x204)] {
-        assert_eq!(run(&[0x60, 0x05, 0x30, nn], 2).pc, expected_pc, "nn = {nn:#04X}");
+        assert_eq!(
+            run(&[0x60, 0x05, 0x30, nn], 2).pc,
+            expected_pc,
+            "nn = {nn:#04X}"
+        );
     }
 }
 
@@ -112,7 +119,11 @@ fn step_3xnn_skips_if_equal() {
 fn step_4xnn_skips_if_not_equal() {
     // V0 = 0x05, then 4 0 NN.
     for (nn, expected_pc) in [(0x05, 0x204), (0x06, 0x206)] {
-        assert_eq!(run(&[0x60, 0x05, 0x40, nn], 2).pc, expected_pc, "nn = {nn:#04X}");
+        assert_eq!(
+            run(&[0x60, 0x05, 0x40, nn], 2).pc,
+            expected_pc,
+            "nn = {nn:#04X}"
+        );
     }
 }
 
@@ -136,7 +147,10 @@ fn step_9xy0_skips_if_registers_differ() {
 
 #[test]
 fn step_rejects_register_skip_with_nonzero_low_nibble() {
-    assert_eq!(run(&[0x50, 0x11], 0).step(), Err(ExecError::UnknownOpcode(0x5011)));
+    assert_eq!(
+        run(&[0x50, 0x11], 0).step(),
+        Err(ExecError::UnknownOpcode(0x5011))
+    );
 }
 
 // --- Registers and arithmetic ---
@@ -259,7 +273,10 @@ fn step_fx33_stores_decimal_digits() {
 #[test]
 fn step_fx55_stores_registers_and_advances_index() {
     // V0..V2 = 0x11, 0x22, 0x33; I = 0x300; then F255.
-    let c = run(&[0x60, 0x11, 0x61, 0x22, 0x62, 0x33, 0xA3, 0x00, 0xF2, 0x55], 5);
+    let c = run(
+        &[0x60, 0x11, 0x61, 0x22, 0x62, 0x33, 0xA3, 0x00, 0xF2, 0x55],
+        5,
+    );
     assert_eq!(c.memory[0x300..0x303], [0x11, 0x22, 0x33]);
     assert_eq!(c.i, 0x303);
 }
@@ -309,7 +326,11 @@ fn step_fx29_points_index_at_font_glyph() {
     assert_eq!(usize::from(c.i), FONT_START + 0xA * FONT_GLYPH_SIZE);
     // First 4 pixels of each row, read as bits.
     let rows: Vec<u8> = (0..5)
-        .map(|r| (0..4).fold(0, |acc, col| acc << 1 | u8::from(c.display[r * DISPLAY_WIDTH + col])))
+        .map(|r| {
+            (0..4).fold(0, |acc, col| {
+                acc << 1 | u8::from(c.display[r * DISPLAY_WIDTH + col])
+            })
+        })
         .collect();
     assert_eq!(rows, [0b1111, 0b1001, 0b1111, 0b1001, 0b1001]);
 }
