@@ -68,7 +68,9 @@ class ReplayBuffer:
     def __len__(self) -> int:
         return self._size
 
-    def add(self, obs: np.ndarray, action: int, reward: float, next_obs: np.ndarray, done: bool) -> None:
+    def add(
+        self, obs: np.ndarray, action: int, reward: float, next_obs: np.ndarray, done: bool
+    ) -> None:
         """Stores a transition, overwriting the oldest once full.
 
         `done` must be True only when the episode terminated; a truncated

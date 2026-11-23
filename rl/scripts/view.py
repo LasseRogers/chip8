@@ -31,7 +31,9 @@ def quit_requested() -> bool:
     return any(event.type == pygame.QUIT for event in pygame.event.get())
 
 
-def draw(window: pygame.Surface, font: pygame.font.Font, frame: np.ndarray | None, text: str) -> None:
+def draw(
+    window: pygame.Surface, font: pygame.font.Font, frame: np.ndarray | None, text: str
+) -> None:
     window.fill((0, 0, 0))
     if frame is not None:
         # pygame indexes surfaces as (x, y); numpy frames are (y, x).

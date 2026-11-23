@@ -86,7 +86,9 @@ def train(cfg: Config, run_dir: Path) -> None:
     with open(run_dir / METRICS_NAME, "a") as metrics:
         try:
             for step in range(cfg.total_steps):
-                epsilon = linear_epsilon(step, cfg.epsilon_start, cfg.epsilon_end, cfg.epsilon_decay_steps)
+                epsilon = linear_epsilon(
+                    step, cfg.epsilon_start, cfg.epsilon_end, cfg.epsilon_decay_steps
+                )
                 action, _ = select_action(online, obs, epsilon, rng)
                 next_obs, reward, terminated, truncated, info = env.step(action)
                 buffer.add(obs, action, reward, next_obs, terminated)
