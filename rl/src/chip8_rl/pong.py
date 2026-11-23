@@ -18,15 +18,20 @@ SCORE_ADDR = 0x2F3
 WIN_SCORE = 9
 # Frames per agent decision, as in DeepMind's Atari setup.
 FRAME_SKIP = 4
+# Screen pixels per CHIP-8 pixel in rendered frames.
+RENDER_SCALE = 8
 
 
 class PongEnv(gym.Env):
-    metadata = {"render_modes": []}
+    metadata = {"render_modes": ["rgb_array"], "render_fps": 60 // FRAME_SKIP}
 
     # Action index -> CHIP-8 key held during the step; None holds nothing.
     ACTION_KEYS = (None, 0x1, 0x4)  # noop, up, down
 
-    def __init__(self, rom_path: Path = ROM_PATH) -> None:
+    def __init__(self, render_mode: str | None = None, rom_path: Path = ROM_PATH) -> None:
+        if render_mode not in (None, *self.metadata["render_modes"]):
+            raise ValueError(f"unsupported render_mode: {render_mode!r}")
+        self.render_mode = render_mode
         self._rom = Path(rom_path).read_bytes()
         self._chip8: chip8.Chip8 | None = None
         self.action_space = spaces.Discrete(len(self.ACTION_KEYS))
@@ -54,6 +59,16 @@ class PongEnv(gym.Env):
         reward = float((agent - agent_before) - (opponent - opponent_before))
         terminated = WIN_SCORE in (agent, opponent)
         return self._observation(), reward, terminated, False, self._info()
+
+    def render(self) -> np.ndarray | None:
+        if self.render_mode == "rgb_array":
+            return self._frame()
+        return None
+
+    def _frame(self) -> np.ndarray:
+        """The screen as an upscaled RGB image, white on black."""
+        pixels = (self._observation() * 255).repeat(RENDER_SCALE, 0).repeat(RENDER_SCALE, 1)
+        return np.stack([pixels] * 3, axis=-1)
 
     def _scores(self) -> tuple[int, int]:
         agent, opponent = self._chip8.read_memory(SCORE_ADDR, 2)
