@@ -79,7 +79,8 @@ def view(run_dir: Path) -> None:
             action, _ = select_action(net, obs, EPSILON, rng)
             obs, _, terminated, truncated, info = env.step(action)
             done = terminated or truncated
-            status = f"checkpoint step {step:,}   |   score {info['agent_score']} - {info['opponent_score']}"
+            score = f"{info['agent_score']} - {info['opponent_score']}"
+            status = f"checkpoint step {step:,}   |   score {score}"
             draw(window, font, env.render(), status)
             clock.tick(FPS)
 
