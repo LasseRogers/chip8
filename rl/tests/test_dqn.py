@@ -1,10 +1,11 @@
 """Tests for DQN components."""
 
 import numpy as np
+import pytest
 import torch
 
 from chip8_rl.device import best_device
-from chip8_rl.dqn import QNetwork, ReplayBuffer
+from chip8_rl.dqn import QNetwork, ReplayBuffer, linear_epsilon, select_action
 from chip8_rl.envs import STACK_SIZE
 
 
@@ -59,3 +60,37 @@ def test_replay_buffer_sample_shapes():
     batch = buffer.sample(4, rng)
     assert batch.obs.shape == batch.next_obs.shape == (4, *OBS_SHAPE)
     assert batch.actions.shape == batch.rewards.shape == batch.dones.shape == (4,)
+
+
+def test_linear_epsilon_anneals_then_holds():
+    assert linear_epsilon(0, 1.0, 0.05, 100) == 1.0
+    assert linear_epsilon(50, 1.0, 0.05, 100) == pytest.approx(0.525)
+    assert linear_epsilon(100, 1.0, 0.05, 100) == pytest.approx(0.05)
+    assert linear_epsilon(1_000, 1.0, 0.05, 100) == pytest.approx(0.05)
+
+
+class FixedQ(torch.nn.Module):
+    """Stand-in network that always returns the same Q-values."""
+
+    def __init__(self, q_values: list[float]) -> None:
+        super().__init__()
+        self.q = torch.nn.Parameter(torch.tensor(q_values), requires_grad=False)
+
+    def forward(self, screens: torch.Tensor) -> torch.Tensor:
+        return self.q.expand(len(screens), -1)
+
+
+def test_greedy_picks_highest_q_value():
+    rng = np.random.default_rng(0)
+    net = FixedQ([0.1, 0.9, -0.5])
+    for _ in range(20):
+        action, q_values = select_action(net, random_obs(rng), epsilon=0.0, rng=rng)
+        assert action == 1
+    assert q_values.tolist() == pytest.approx([0.1, 0.9, -0.5])
+
+
+def test_full_exploration_covers_all_actions():
+    rng = np.random.default_rng(0)
+    net = FixedQ([0.1, 0.9, -0.5])
+    actions = {select_action(net, random_obs(rng), epsilon=1.0, rng=rng)[0] for _ in range(100)}
+    assert actions == {0, 1, 2}

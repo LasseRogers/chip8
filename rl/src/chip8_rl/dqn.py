@@ -97,3 +97,25 @@ class ReplayBuffer:
     def _unpack(self, packed: np.ndarray) -> np.ndarray:
         pixels = np.unpackbits(packed, axis=1, count=self._pixels)
         return pixels.reshape(-1, *self._obs_shape)
+
+
+def linear_epsilon(step: int, start: float, end: float, decay_steps: int) -> float:
+    """Anneals linearly from `start` to `end` over `decay_steps`, then holds."""
+    fraction = min(step / decay_steps, 1.0)
+    return start + fraction * (end - start)
+
+
+@torch.no_grad()
+def select_action(
+    net: nn.Module, obs: np.ndarray, epsilon: float, rng: np.random.Generator
+) -> tuple[int, np.ndarray]:
+    """Epsilon-greedy action for one observation.
+
+    Also returns the network's Q-values, computed even when acting randomly,
+    so callers can always display what the network thinks.
+    """
+    device = next(net.parameters()).device
+    q_values = net(torch.as_tensor(obs, device=device).unsqueeze(0))[0].cpu().numpy()
+    if rng.random() < epsilon:
+        return int(rng.integers(len(q_values))), q_values
+    return int(q_values.argmax()), q_values
