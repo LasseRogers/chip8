@@ -119,7 +119,7 @@ def view(run_dir: Path) -> None:
     env = make_pong_env(render_mode="rgb_array")
     env.reset()
     height, width, _ = env.render().shape
-    viewer = Viewer((width, height), env.unwrapped.ACTION_NAMES, f"chip8 viewer: {run_dir}")
+    viewer = Viewer((width, height), env.unwrapped.action_names, f"chip8 viewer: {run_dir}")
     clock = pygame.time.Clock()
     net, step, loaded_mtime = None, 0, None
     last_poll = 0.0

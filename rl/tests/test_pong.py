@@ -11,7 +11,8 @@ import pytest
 from gymnasium.utils.env_checker import check_env
 
 from chip8_rl import PONG_ID, PongEnv
-from chip8_rl.pong import RENDER_SCALE, WIN_SCORE
+from chip8_rl.base import RENDER_SCALE
+from chip8_rl.pong import WIN_SCORE
 
 
 @pytest.fixture
