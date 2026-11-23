@@ -11,3 +11,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = "0.30"
+chip8-core = { path = "../chip8-core" }

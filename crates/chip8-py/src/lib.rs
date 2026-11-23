@@ -1,10 +1,40 @@
 //! Python bindings for `chip8-core`.
 
+use chip8_core::{Chip8, RomTooLarge};
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+
+/// A CHIP-8 machine. Thin wrapper over `chip8_core::Chip8`.
+#[pyclass(name = "Chip8", module = "chip8")]
+struct PyChip8(Chip8);
+
+#[pymethods]
+impl PyChip8 {
+    #[new]
+    #[pyo3(signature = (seed = 0))]
+    fn new(seed: u64) -> Self {
+        Self(Chip8::with_seed(seed))
+    }
+
+    /// Copies `rom` into memory at 0x200. Raises `ValueError` if it doesn't fit.
+    fn load_rom(&mut self, rom: &[u8]) -> PyResult<()> {
+        self.0
+            .load_rom(rom)
+            .map_err(|RomTooLarge(size)| PyValueError::new_err(format!("ROM too large: {size} bytes")))
+    }
+
+    /// Executes one instruction. Raises `RuntimeError` on an execution error.
+    fn step(&mut self) -> PyResult<()> {
+        self.0.step().map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    }
+}
 
 #[pymodule]
 mod chip8 {
     use pyo3::prelude::*;
+
+    #[pymodule_export]
+    use super::PyChip8;
 
     #[pymodule_init]
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {

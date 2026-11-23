@@ -9,3 +9,12 @@ requires-python = ">=3.11"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+
+[tool.uv]
+# Rebuild when Rust sources change, not just pyproject.toml.
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "src/**/*.rs" },
+    { file = "../chip8-core/src/**/*.rs" },
+]
