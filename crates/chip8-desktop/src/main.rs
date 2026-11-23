@@ -6,10 +6,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use chip8_core::{Chip8, DEFAULT_INSTRUCTIONS_PER_FRAME, DISPLAY_HEIGHT, DISPLAY_WIDTH};
+use chip8_core::{Chip8, DEFAULT_INSTRUCTIONS_PER_FRAME, DISPLAY_HEIGHT, DISPLAY_WIDTH, Quirks};
 use minifb::{Key, Scale, Window, WindowOptions};
 
-const USAGE: &str = "usage: chip8-desktop <rom> [--seed N]";
+const USAGE: &str = "usage: chip8-desktop <rom> [--seed N] [--profile cosmac|superchip]";
 const PIXEL_ON: u32 = 0x00FF_FFFF;
 const PIXEL_OFF: u32 = 0x0000_0000;
 
@@ -24,22 +24,10 @@ const KEYMAP: [(Key, u8); 16] = [
 ];
 
 fn main() -> ExitCode {
-    let mut args = env::args().skip(1);
-    let Some(path) = args.next() else {
-        eprintln!("{USAGE}");
-        return ExitCode::FAILURE;
-    };
-    let seed = match (args.next().as_deref(), args.next()) {
-        (None, _) => clock_seed(),
-        (Some("--seed"), Some(n)) => match n.parse() {
-            Ok(seed) => seed,
-            Err(_) => {
-                eprintln!("invalid seed: {n}");
-                return ExitCode::FAILURE;
-            }
-        },
-        _ => {
-            eprintln!("{USAGE}");
+    let Args { path, seed, quirks } = match parse_args(env::args().skip(1)) {
+        Ok(args) => args,
+        Err(message) => {
+            eprintln!("{message}\n{USAGE}");
             return ExitCode::FAILURE;
         }
     };
@@ -54,7 +42,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let mut chip8 = Chip8::with_seed(seed);
+    let mut chip8 = Chip8::with_seed(seed).with_quirks(quirks);
     if let Err(e) = chip8.load_rom(&rom) {
         eprintln!("failed to load {path}: {e:?}");
         return ExitCode::FAILURE;
@@ -92,6 +80,46 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+struct Args {
+    path: String,
+    seed: u64,
+    quirks: Quirks,
+}
+
+/// Parses `<rom> [--seed N] [--profile cosmac|superchip]`, in any order.
+fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
+    let mut path = None;
+    let mut seed = None;
+    let mut quirks = Quirks::COSMAC;
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--seed" => {
+                let value = args.next().ok_or("--seed needs a value")?;
+                seed = Some(
+                    value
+                        .parse()
+                        .map_err(|_| format!("invalid seed: {value}"))?,
+                );
+            }
+            "--profile" => {
+                quirks = match args.next().as_deref() {
+                    Some("cosmac") => Quirks::COSMAC,
+                    Some("superchip") => Quirks::SUPER_CHIP,
+                    other => return Err(format!("unknown profile: {}", other.unwrap_or(""))),
+                };
+            }
+            _ if arg.starts_with("--") => return Err(format!("unknown option: {arg}")),
+            _ if path.is_none() => path = Some(arg),
+            _ => return Err(format!("unexpected argument: {arg}")),
+        }
+    }
+    Ok(Args {
+        path: path.ok_or("missing ROM path")?,
+        seed: seed.unwrap_or_else(clock_seed),
+        quirks,
+    })
+}
+
 /// Nanoseconds since the Unix epoch; differs on every run.
 fn clock_seed() -> u64 {
     SystemTime::now()
@@ -103,5 +131,42 @@ fn clock_seed() -> u64 {
 fn render(display: &[bool], buffer: &mut [u32]) {
     for (dst, &lit) in buffer.iter_mut().zip(display) {
         *dst = if lit { PIXEL_ON } else { PIXEL_OFF };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(args: &[&str]) -> Result<Args, String> {
+        parse_args(args.iter().map(|s| s.to_string()))
+    }
+
+    #[test]
+    fn parses_flags_in_any_order() {
+        let args = parse(&["--profile", "superchip", "game.ch8", "--seed", "7"]).unwrap();
+        assert_eq!(
+            (args.path.as_str(), args.seed, args.quirks),
+            ("game.ch8", 7, Quirks::SUPER_CHIP)
+        );
+    }
+
+    #[test]
+    fn defaults_to_cosmac() {
+        assert_eq!(parse(&["game.ch8"]).unwrap().quirks, Quirks::COSMAC);
+    }
+
+    #[test]
+    fn rejects_bad_input() {
+        let cases: [&[&str]; 5] = [
+            &[],
+            &["game.ch8", "--profile", "x"],
+            &["game.ch8", "--seed"],
+            &["a.ch8", "b.ch8"],
+            &["game.ch8", "--fast"],
+        ];
+        for bad in cases {
+            assert!(parse(bad).is_err(), "{bad:?}");
+        }
     }
 }
