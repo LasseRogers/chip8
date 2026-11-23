@@ -3,6 +3,7 @@
 use chip8_core::{Chip8, RomTooLarge};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 
 /// A CHIP-8 machine. Thin wrapper over `chip8_core::Chip8`.
 #[pyclass(name = "Chip8", module = "chip8")]
@@ -26,6 +27,26 @@ impl PyChip8 {
     /// Executes one instruction. Raises `RuntimeError` on an execution error.
     fn step(&mut self) -> PyResult<()> {
         self.0.step().map_err(|e| PyRuntimeError::new_err(e.to_string()))
+    }
+
+    /// Presses or releases hex key `key` (0-15). Raises `ValueError` otherwise.
+    fn set_key(&mut self, key: u8, pressed: bool) -> PyResult<()> {
+        if key > 0xF {
+            return Err(PyValueError::new_err(format!("key out of range: {key}")));
+        }
+        self.0.set_key(key, pressed);
+        Ok(())
+    }
+
+    /// Advances one 60 Hz frame: decrements timers, releases the display wait.
+    fn tick_timers(&mut self) {
+        self.0.tick_timers();
+    }
+
+    /// The 64x32 display as 2048 bytes, row-major; 1 is a lit pixel.
+    fn screen<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        let pixels: Vec<u8> = self.0.display().iter().map(|&p| u8::from(p)).collect();
+        PyBytes::new(py, &pixels)
     }
 }
 
