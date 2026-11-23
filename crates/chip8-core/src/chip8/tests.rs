@@ -333,3 +333,14 @@ fn step_fx1e_adds_vx_to_index() {
     }
     assert_eq!(c.i, 0x120);
 }
+
+#[test]
+fn step_fx33_stores_decimal_digits() {
+    // I = 0x300, V0 = 157, then F033.
+    let mut c = Chip8::new();
+    c.load_rom(&[0xA3, 0x00, 0x60, 157, 0xF0, 0x33]).unwrap();
+    for _ in 0..3 {
+        c.step().unwrap();
+    }
+    assert_eq!(c.memory[0x300..0x303], [1, 5, 7]);
+}

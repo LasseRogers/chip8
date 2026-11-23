@@ -183,6 +183,12 @@ impl Chip8 {
         match nn {
             // VF is not affected (COSMAC VIP behaviour).
             0x1E => self.i += u16::from(self.v[x]),
+            // Hundreds, tens and ones digits of VX at I, I+1, I+2.
+            0x33 => {
+                let vx = self.v[x];
+                let i = usize::from(self.i);
+                self.memory[i..i + 3].copy_from_slice(&[vx / 100, vx / 10 % 10, vx % 10]);
+            }
             _ => return Err(ExecError::UnknownOpcode(op)),
         }
         Ok(())
