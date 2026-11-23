@@ -303,3 +303,14 @@ fn step_fx29_points_index_at_font_glyph() {
         .collect();
     assert_eq!(rows, [0b1111, 0b1001, 0b1111, 0b1001, 0b1001]);
 }
+
+// --- Timers ---
+
+#[test]
+fn step_fx15_fx18_fx07_set_and_read_timers() {
+    // V0 = 0x30; delay = V0; sound = V0; V1 = delay.
+    let c = run(&[0x60, 0x30, 0xF0, 0x15, 0xF0, 0x18, 0xF1, 0x07], 4);
+    assert_eq!(c.delay_timer, 0x30);
+    assert_eq!(c.sound_timer, 0x30);
+    assert_eq!(c.v[1], 0x30);
+}

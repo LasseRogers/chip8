@@ -82,6 +82,10 @@ pub struct Chip8 {
     sp: usize,
     /// Source for `CXNN`; seeded so runs can be replayed exactly.
     rng: Rng,
+    /// Counts down at 60 Hz; programs use it for timing.
+    delay_timer: u8,
+    /// Counts down at 60 Hz; the buzzer sounds while non-zero.
+    sound_timer: u8,
 }
 
 impl Chip8 {
@@ -103,6 +107,8 @@ impl Chip8 {
             stack: [0; STACK_DEPTH],
             sp: 0,
             rng: Rng::new(seed),
+            delay_timer: 0,
+            sound_timer: 0,
         }
     }
 
@@ -207,6 +213,9 @@ impl Chip8 {
     fn misc(&mut self, op: u16, x: usize, nn: u8) -> Result<(), ExecError> {
         match nn {
             // VF is not affected (COSMAC VIP behaviour).
+            0x07 => self.v[x] = self.delay_timer,
+            0x15 => self.delay_timer = self.v[x],
+            0x18 => self.sound_timer = self.v[x],
             0x1E => self.i += u16::from(self.v[x]),
             // Only the low nibble of VX selects a glyph.
             0x29 => self.i = (FONT_START + usize::from(self.v[x] & 0xF) * FONT_GLYPH_SIZE) as u16,
