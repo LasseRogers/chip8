@@ -118,6 +118,8 @@ impl Chip8 {
             0x8 => self.alu(op, x, y, n)?,
             0x9 if n == 0 => self.skip_if(self.v[x] != self.v[y]),
             0xA => self.i = nnn,
+            // COSMAC VIP quirk: the offset is always V0, not VX.
+            0xB => self.pc = nnn + u16::from(self.v[0]),
             0xD => self.draw_sprite(x, y, n),
             _ => return Err(ExecError::UnknownOpcode(op)),
         }

@@ -285,3 +285,14 @@ fn step_8xy6_8xye_shift_vy_into_vx() {
         assert_eq!(c.v[0xF], expected_vf, "8XY{n:X} {v1:#04X} VF");
     }
 }
+
+#[test]
+fn step_bnnn_jumps_with_v0_offset() {
+    // V0 = 0x10, V2 = 0x99, then B200: target is 0x200 + V0, not + V2.
+    let mut c = Chip8::new();
+    c.load_rom(&[0x60, 0x10, 0x62, 0x99, 0xB2, 0x00]).unwrap();
+    for _ in 0..3 {
+        c.step().unwrap();
+    }
+    assert_eq!(c.pc, 0x210);
+}
